@@ -18,7 +18,7 @@ export default auth((req) => {
     return;
   }
 
-  const isAuthRoute = path === "/login" || path === "/signup";
+  const isAuthRoute = path === "/login";
   if (isAuthRoute) {
     if (isLoggedIn) {
       return Response.redirect(new URL("/pos", nextUrl));

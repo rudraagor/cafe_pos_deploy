@@ -9,23 +9,45 @@ import {
   products,
   users,
 } from "@/lib/db/schema";
-import type { ReportRange } from "./range";
+import type { ReportFilters, ReportRange } from "./range";
 
-type NumericRow<T extends string> = Record<T, string | number | null>;
-
-function paidRangeWhere(range: ReportRange) {
-  return and(
+function paidOrdersWhere(filters: ReportRange | ReportFilters) {
+  const conditions = [
     eq(orders.status, "paid"),
-    gte(orders.updatedAt, range.start),
-    lt(orders.updatedAt, range.end),
-  );
+    gte(orders.updatedAt, filters.start),
+    lt(orders.updatedAt, filters.end),
+  ];
+
+  if ("employeeId" in filters && filters.employeeId) {
+    conditions.push(eq(orders.employeeId, filters.employeeId));
+  }
+  if ("sessionId" in filters && filters.sessionId) {
+    conditions.push(eq(orders.sessionId, filters.sessionId));
+  }
+  if ("productId" in filters && filters.productId) {
+    conditions.push(sql`exists (
+      select 1 from ${orderItems}
+      where ${orderItems.orderId} = ${orders.id}
+        and ${orderItems.productId} = ${filters.productId}
+    )`);
+  }
+
+  return and(...conditions);
+}
+
+function paidLineItemsWhere(filters: ReportRange | ReportFilters) {
+  const conditions = [paidOrdersWhere(filters)];
+  if ("productId" in filters && filters.productId) {
+    conditions.push(eq(orderItems.productId, filters.productId));
+  }
+  return and(...conditions);
 }
 
 function toNumber(value: string | number | null | undefined) {
   return Number(value ?? 0);
 }
 
-export async function getSalesSummary(range: ReportRange) {
+export async function getSalesSummary(filters: ReportRange | ReportFilters) {
   const [row] = await db
     .select({
       revenue: sql<string>`coalesce(sum(${orders.total}), 0)`,
@@ -36,7 +58,7 @@ export async function getSalesSummary(range: ReportRange) {
       taxTotal: sql<string>`coalesce(sum(${orders.tax}), 0)`,
     })
     .from(orders)
-    .where(paidRangeWhere(range));
+    .where(paidOrdersWhere(filters));
 
   return {
     revenue: toNumber(row?.revenue),
@@ -48,7 +70,7 @@ export async function getSalesSummary(range: ReportRange) {
   };
 }
 
-export async function getRevenueByDay(range: ReportRange) {
+export async function getRevenueByDay(filters: ReportRange | ReportFilters) {
   const rows = await db
     .select({
       label: sql<string>`to_char(date_trunc('day', ${orders.updatedAt}), 'YYYY-MM-DD')`,
@@ -56,7 +78,7 @@ export async function getRevenueByDay(range: ReportRange) {
       orders: sql<number>`count(${orders.id})::int`,
     })
     .from(orders)
-    .where(paidRangeWhere(range))
+    .where(paidOrdersWhere(filters))
     .groupBy(sql`date_trunc('day', ${orders.updatedAt})`)
     .orderBy(sql`date_trunc('day', ${orders.updatedAt})`);
 
@@ -67,7 +89,7 @@ export async function getRevenueByDay(range: ReportRange) {
   }));
 }
 
-export async function getSalesByHour(range: ReportRange) {
+export async function getSalesByHour(filters: ReportRange | ReportFilters) {
   const rows = await db
     .select({
       hour: sql<number>`extract(hour from ${orders.updatedAt})::int`,
@@ -75,7 +97,7 @@ export async function getSalesByHour(range: ReportRange) {
       orders: sql<number>`count(${orders.id})::int`,
     })
     .from(orders)
-    .where(paidRangeWhere(range))
+    .where(paidOrdersWhere(filters))
     .groupBy(sql`extract(hour from ${orders.updatedAt})`)
     .orderBy(sql`extract(hour from ${orders.updatedAt})`);
 
@@ -87,7 +109,10 @@ export async function getSalesByHour(range: ReportRange) {
   }));
 }
 
-export async function getTopProducts(range: ReportRange, limit = 8) {
+export async function getTopProducts(
+  filters: ReportRange | ReportFilters,
+  limit = 8,
+) {
   const rows = await db
     .select({
       product: orderItems.nameSnapshot,
@@ -96,7 +121,7 @@ export async function getTopProducts(range: ReportRange, limit = 8) {
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(paidRangeWhere(range))
+    .where(paidLineItemsWhere(filters))
     .groupBy(orderItems.nameSnapshot)
     .orderBy(desc(sql`sum(${orderItems.quantity})`))
     .limit(limit);
@@ -108,7 +133,7 @@ export async function getTopProducts(range: ReportRange, limit = 8) {
   }));
 }
 
-export async function getSalesByCategory(range: ReportRange) {
+export async function getSalesByCategory(filters: ReportRange | ReportFilters) {
   const rows = await db
     .select({
       category: sql<string>`coalesce(${categories.name}, 'Uncategorized')`,
@@ -119,7 +144,7 @@ export async function getSalesByCategory(range: ReportRange) {
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .leftJoin(products, eq(orderItems.productId, products.id))
     .leftJoin(categories, eq(products.categoryId, categories.id))
-    .where(paidRangeWhere(range))
+    .where(paidLineItemsWhere(filters))
     .groupBy(categories.name)
     .orderBy(desc(sql`sum(${orderItems.lineTotal})`));
 
@@ -130,7 +155,7 @@ export async function getSalesByCategory(range: ReportRange) {
   }));
 }
 
-export async function getPaymentMix(range: ReportRange) {
+export async function getPaymentMix(filters: ReportRange | ReportFilters) {
   const rows = await db
     .select({
       method: payments.method,
@@ -139,7 +164,7 @@ export async function getPaymentMix(range: ReportRange) {
     })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(paidRangeWhere(range))
+    .where(paidOrdersWhere(filters))
     .groupBy(payments.method)
     .orderBy(desc(sql`sum(${payments.amount})`));
 
@@ -150,12 +175,12 @@ export async function getPaymentMix(range: ReportRange) {
   }));
 }
 
-export async function getProductVelocity(range: ReportRange) {
+export async function getProductVelocity(filters: ReportRange | ReportFilters) {
   const days = Math.max(
     1,
-    Math.ceil((range.end.getTime() - range.start.getTime()) / 86400000),
+    Math.ceil((filters.end.getTime() - filters.start.getTime()) / 86400000),
   );
-  const rows = await getTopProducts(range, 20);
+  const rows = await getTopProducts(filters, 20);
   return rows.map((row) => ({
     product: row.product,
     quantity: row.quantity,
@@ -164,7 +189,31 @@ export async function getProductVelocity(range: ReportRange) {
   }));
 }
 
-export async function getReportDashboard(range: ReportRange) {
+export async function getTopOrders(
+  filters: ReportRange | ReportFilters,
+  limit = 8,
+) {
+  const rows = await db.query.orders.findMany({
+    where: paidOrdersWhere(filters),
+    with: {
+      customer: true,
+      employee: true,
+    },
+    orderBy: [desc(orders.total)],
+    limit,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    orderNumber: row.orderNumber,
+    customer: row.customer?.name ?? "Walk-in",
+    employee: row.employee?.name ?? "Unknown",
+    paidAt: row.updatedAt,
+    total: Number(row.total),
+  }));
+}
+
+export async function getReportDashboard(filters: ReportRange | ReportFilters) {
   const [
     summary,
     revenueByDay,
@@ -173,14 +222,16 @@ export async function getReportDashboard(range: ReportRange) {
     salesByCategory,
     paymentMix,
     productVelocity,
+    topOrders,
   ] = await Promise.all([
-    getSalesSummary(range),
-    getRevenueByDay(range),
-    getSalesByHour(range),
-    getTopProducts(range),
-    getSalesByCategory(range),
-    getPaymentMix(range),
-    getProductVelocity(range),
+    getSalesSummary(filters),
+    getRevenueByDay(filters),
+    getSalesByHour(filters),
+    getTopProducts(filters),
+    getSalesByCategory(filters),
+    getPaymentMix(filters),
+    getProductVelocity(filters),
+    getTopOrders(filters),
   ]);
 
   return {
@@ -191,6 +242,42 @@ export async function getReportDashboard(range: ReportRange) {
     salesByCategory,
     paymentMix,
     productVelocity,
+    topOrders,
+  };
+}
+
+export async function getReportFilterOptions() {
+  const [employees, sessions, productRows] = await Promise.all([
+    db.query.users.findMany({
+      orderBy: (user, { asc }) => [asc(user.name)],
+    }),
+    db.query.posSessions.findMany({
+      with: {
+        openedByUser: true,
+      },
+      orderBy: [desc(posSessions.openedAt)],
+      limit: 100,
+    }),
+    db.query.products.findMany({
+      orderBy: (product, { asc }) => [asc(product.name)],
+    }),
+  ]);
+
+  return {
+    employees: employees.map((employee) => ({
+      id: employee.id,
+      label: `${employee.name} (${employee.role})`,
+    })),
+    sessions: sessions.map((session) => ({
+      id: session.id,
+      label: `${session.openedAt.toLocaleString()} - ${
+        session.openedByUser?.name ?? "Unknown"
+      } (${session.status})`,
+    })),
+    products: productRows.map((product) => ({
+      id: product.id,
+      label: product.name,
+    })),
   };
 }
 
@@ -282,14 +369,16 @@ export async function getSessionReport(sessionId: string) {
   };
 }
 
-export async function getDashboardCsvRows(range: ReportRange) {
-  const [summary, topProducts, categories, payments, hours] = await Promise.all([
-    getSalesSummary(range),
-    getTopProducts(range, 50),
-    getSalesByCategory(range),
-    getPaymentMix(range),
-    getSalesByHour(range),
-  ]);
+export async function getDashboardCsvRows(filters: ReportRange | ReportFilters) {
+  const [summary, topProducts, categories, payments, hours, topOrders] =
+    await Promise.all([
+      getSalesSummary(filters),
+      getTopProducts(filters, 50),
+      getSalesByCategory(filters),
+      getPaymentMix(filters),
+      getSalesByHour(filters),
+      getTopOrders(filters, 50),
+    ]);
 
   const rows: Record<string, string | number>[] = [
     { section: "summary", label: "revenue", value: summary.revenue },
@@ -302,6 +391,14 @@ export async function getDashboardCsvRows(range: ReportRange) {
       label: row.product,
       quantity: row.quantity,
       value: row.revenue,
+    })),
+    ...topOrders.map((row) => ({
+      section: "top_order",
+      label: row.orderNumber,
+      customer: row.customer,
+      employee: row.employee,
+      paid_at: row.paidAt.toISOString(),
+      value: row.total,
     })),
     ...categories.map((row) => ({
       section: "category",

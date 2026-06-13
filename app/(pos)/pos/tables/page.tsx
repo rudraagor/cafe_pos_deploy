@@ -1,8 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { TableGrid } from "@/components/pos/table-grid";
 import {
+  getActiveTableOccupancies,
   getFloorsWithTables,
-  getOccupiedTableIds,
 } from "@/lib/pos/queries";
 import { getOpenSessionForUser } from "@/lib/pos/session";
 import { redirect } from "next/navigation";
@@ -12,10 +12,11 @@ export default async function PosTablesPage() {
   const session = await getOpenSessionForUser(user.id);
   if (!session) redirect("/pos");
 
-  const [floors, occupiedSet] = await Promise.all([
+  const [floors, activeTableOrders] = await Promise.all([
     getFloorsWithTables(),
-    getOccupiedTableIds(session.id),
+    getActiveTableOccupancies(session.id),
   ]);
+  const occupiedOrdersByTable = Object.fromEntries(activeTableOrders);
 
   return (
     <div className="p-6">
@@ -26,7 +27,8 @@ export default async function PosTablesPage() {
           name: f.name,
           tables: f.tables,
         }))}
-        occupiedTableIds={[...occupiedSet]}
+        occupiedTableIds={Object.keys(occupiedOrdersByTable)}
+        occupiedOrdersByTable={occupiedOrdersByTable}
       />
     </div>
   );

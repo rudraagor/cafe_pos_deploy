@@ -16,12 +16,16 @@ type CustomerOption = { id: string; name: string; email: string | null };
 
 type OrderSummaryProps = {
   tableId: string;
+  orderTableId: string | null;
+  fulfillmentType: "dine_in" | "takeaway";
   promotions: PromotionInput[];
   customers: CustomerOption[];
 };
 
 export function OrderSummary({
   tableId,
+  orderTableId,
+  fulfillmentType,
   promotions,
   customers,
 }: OrderSummaryProps) {
@@ -33,6 +37,7 @@ export function OrderSummary({
   const [isPending, startTransition] = useTransition();
 
   const computed = useCartPricing(tableId, promotions);
+  const hasKitchenItems = cart.items.some((item) => item.isKitchenItem);
 
   function handleSend(payAfter = false) {
     if (cart.items.length === 0) {
@@ -42,7 +47,8 @@ export function OrderSummary({
 
     startTransition(async () => {
       const result = await sendToKitchen({
-        tableId,
+        tableId: orderTableId,
+        fulfillmentType,
         orderId: cart.orderId,
         items: cart.items,
         couponCode: cart.couponCode,
@@ -155,14 +161,19 @@ export function OrderSummary({
           variant="outline"
           className="w-full"
           onClick={() => handleSend(true)}
-          disabled={isPending || cart.items.length === 0}
+          disabled={isPending || cart.items.length === 0 || hasKitchenItems}
+          title={
+            hasKitchenItems
+              ? "Kitchen orders can be paid after KDS marks them ready."
+              : undefined
+          }
         >
           {isPending ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <CreditCard className="size-4" />
           )}
-          Send & Pay
+          {hasKitchenItems ? "Pay after ready" : "Send & Pay"}
         </Button>
       </div>
 

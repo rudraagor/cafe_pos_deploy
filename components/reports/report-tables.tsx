@@ -44,6 +44,82 @@ export function TopProductsTable({
   );
 }
 
+export function TopOrdersTable({
+  rows,
+}: {
+  rows: {
+    id: string;
+    orderNumber: string;
+    customer: string;
+    employee: string;
+    total: number;
+  }[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Top orders</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Order</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Employee</TableHead>
+              <TableHead>Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell>{row.orderNumber}</TableCell>
+                <TableCell>{row.customer}</TableCell>
+                <TableCell>{row.employee}</TableCell>
+                <TableCell>{formatMoney(row.total)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function TopCategoriesTable({
+  rows,
+}: {
+  rows: { category: string; quantity: number; revenue: number }[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Top categories</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Category</TableHead>
+              <TableHead>Qty</TableHead>
+              <TableHead>Revenue</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.category}>
+                <TableCell>{row.category}</TableCell>
+                <TableCell>{row.quantity}</TableCell>
+                <TableCell>{formatMoney(row.revenue)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SessionsLinkCard() {
   return (
     <Card>

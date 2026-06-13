@@ -2,7 +2,9 @@ export type KdsStage = "to_cook" | "preparing" | "completed";
 
 export type KdsTicketItem = {
   id: string;
+  productId: string | null;
   nameSnapshot: string;
+  categoryName: string | null;
   quantity: number;
   itemCompleted: boolean;
 };

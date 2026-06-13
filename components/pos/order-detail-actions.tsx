@@ -1,6 +1,14 @@
 "use client";
 
-import { CreditCard, Loader2, Mail, Pencil, Printer, ReceiptText, Trash2 } from "lucide-react";
+import {
+  CreditCard,
+  Loader2,
+  Mail,
+  Pencil,
+  Printer,
+  ReceiptText,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -12,7 +20,7 @@ import {
 } from "@/components/pos/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useCartStore } from "@/lib/pos/cart-store";
+import { TAKEAWAY_CART_ID, useCartStore } from "@/lib/pos/cart-store";
 import { formatMoney } from "@/lib/pos/pricing";
 
 type OrderItemRow = {
@@ -25,7 +33,8 @@ type OrderItemRow = {
 
 type EditDraftPayload = {
   orderId: string;
-  tableId: string;
+  tableId: string | null;
+  fulfillmentType: "dine_in" | "takeaway";
   items: {
     productId: string;
     name: string;
@@ -54,6 +63,7 @@ type OrderDetailActionsProps = {
   upiPaymentUrl?: string | null;
   defaultPayOpen?: boolean;
   customerEmail?: string | null;
+  paymentReady: boolean;
 };
 
 export function OrderDetailActions({
@@ -68,6 +78,7 @@ export function OrderDetailActions({
   upiPaymentUrl,
   defaultPayOpen = false,
   customerEmail,
+  paymentReady,
 }: OrderDetailActionsProps) {
   const router = useRouter();
   const loadDraft = useCartStore((s) => s.loadDraft);
@@ -75,7 +86,12 @@ export function OrderDetailActions({
 
   function handleEdit() {
     if (!editPayload) return;
-    loadDraft(editPayload.tableId, {
+    const cartId =
+      editPayload.fulfillmentType === "takeaway"
+        ? TAKEAWAY_CART_ID
+        : editPayload.tableId;
+    if (!cartId) return;
+    loadDraft(cartId, {
       orderId: editPayload.orderId,
       items: editPayload.items,
       couponCode: editPayload.couponCode,
@@ -85,7 +101,11 @@ export function OrderDetailActions({
       customerId: editPayload.customerId,
       customerName: editPayload.customerName,
     });
-    router.push(`/pos?table=${editPayload.tableId}`);
+    router.push(
+      editPayload.fulfillmentType === "takeaway"
+        ? "/pos/takeaway"
+        : `/pos?table=${editPayload.tableId}&edit=${editPayload.orderId}`,
+    );
   }
 
   function handleDelete() {
@@ -124,7 +144,11 @@ export function OrderDetailActions({
           <Printer className="size-4" />
           Print receipt
         </Button>
-        <Button type="button" variant="outline" render={<Link href={`/receipt/${orderId}`} />}>
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link href={`/receipt/${orderId}`} />}
+        >
           <ReceiptText className="size-4" />
           View receipt
         </Button>
@@ -149,19 +173,26 @@ export function OrderDetailActions({
 
   return (
     <div className="flex flex-wrap gap-2">
-      <PaymentDialog
-        order={{ id: orderId, orderNumber, total, tableId }}
-        methods={paymentMethods}
-        upiQrDataUrl={upiQrDataUrl}
-        upiPaymentUrl={upiPaymentUrl}
-        defaultOpen={defaultPayOpen}
-        trigger={
-          <Button type="button">
-            <CreditCard className="size-4" />
-            Pay
-          </Button>
-        }
-      />
+      {paymentReady ? (
+        <PaymentDialog
+          order={{ id: orderId, orderNumber, total, tableId }}
+          methods={paymentMethods}
+          upiQrDataUrl={upiQrDataUrl}
+          upiPaymentUrl={upiPaymentUrl}
+          defaultOpen={defaultPayOpen}
+          trigger={
+            <Button type="button">
+              <CreditCard className="size-4" />
+              Pay
+            </Button>
+          }
+        />
+      ) : (
+        <Button type="button" disabled title="KDS must mark food ready first.">
+          <CreditCard className="size-4" />
+          Pay after ready
+        </Button>
+      )}
       <Button type="button" variant="outline" onClick={handleEdit}>
         <Pencil className="size-4" />
         Edit Order

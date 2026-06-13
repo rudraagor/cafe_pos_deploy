@@ -17,6 +17,8 @@ export type TableCart = {
   customerName?: string;
 };
 
+export const TAKEAWAY_CART_ID = "takeaway";
+
 /** Stable fallback — must be the same reference for empty carts (Zustand SSR). */
 export const EMPTY_CART: TableCart = { items: [] };
 

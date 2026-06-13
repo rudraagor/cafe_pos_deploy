@@ -8,7 +8,11 @@ import { buildReportAiContext } from "@/lib/ai/context";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { aiReports } from "@/lib/db/schema";
-import { parseReportRange, type ReportSearchParams } from "@/lib/reports/range";
+import {
+  parseReportFilters,
+  type ReportFilters,
+  type ReportSearchParams,
+} from "@/lib/reports/range";
 
 type AiActionResult<T = string> = ActionResult & {
   data?: T;
@@ -22,36 +26,40 @@ type ForecastItem = {
   suggestion: string;
 };
 
+type AiMessage = {
+  role: "system" | "user";
+  content: string;
+};
+
+type AiTextResult = { ok: true; data: string } | { ok: false; error: string };
+
 export async function generateDailyBriefing(
   params: ReportSearchParams,
 ): Promise<AiActionResult> {
   await requireRole("admin");
-  const range = parseReportRange(params);
-  const cached = await getCachedAiReport<string>("daily_briefing", range);
+  const filters = parseReportFilters(params);
+  const cached = await getCachedAiReport<string>("daily_briefing", filters);
   if (cached) return { ok: true, data: cached, cached: true };
 
   const ai = getOpenAI();
   if (!ai.ok) return { ok: false, error: ai.error };
 
-  const context = await buildReportAiContext(range);
-  const response = await ai.client.responses.create({
-    model: ai.model,
-    max_output_tokens: 500,
-    input: [
-      {
-        role: "system",
-        content:
-          "You are a concise cafe analyst. Use only the provided aggregate data. Write a short daily briefing with revenue, paid orders, best seller, quiet period if visible, and exactly two practical actions. Do not invent missing data.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify(context),
-      },
-    ],
-  });
+  const context = await buildReportAiContext(filters);
+  const response = await createResponse(ai, [
+    {
+      role: "system",
+      content:
+        "You are a concise cafe analyst. Use only the provided filtered aggregate data. Write a short daily briefing with revenue, paid orders, best seller, quiet period if visible, and exactly two practical actions. Mention that the answer is scoped to the selected filters. Do not invent missing data.",
+    },
+    {
+      role: "user",
+      content: JSON.stringify(context),
+    },
+  ], 500);
+  if (!response.ok) return response;
 
-  const text = response.output_text.trim();
-  await cacheAiReport("daily_briefing", range, text);
+  const text = response.data.trim();
+  await cacheAiReport("daily_briefing", filters, text);
   revalidatePath("/admin/reports");
   return { ok: true, data: text };
 }
@@ -60,39 +68,37 @@ export async function generateInventoryForecast(
   params: ReportSearchParams,
 ): Promise<AiActionResult<ForecastItem[]>> {
   await requireRole("admin");
-  const range = parseReportRange(params);
+  const filters = parseReportFilters(params);
   const cached = await getCachedAiReport<ForecastItem[]>(
     "inventory_forecast",
-    range,
+    filters,
   );
   if (cached) return { ok: true, data: cached, cached: true };
 
   const ai = getOpenAI();
   if (!ai.ok) return { ok: false, error: ai.error };
 
-  const context = await buildReportAiContext(range);
-  const response = await ai.client.responses.create({
-    model: ai.model,
-    max_output_tokens: 700,
-    input: [
-      {
-        role: "system",
-        content:
-          "You forecast cafe prep needs from aggregate product velocity. Return only valid JSON: an array of up to 8 objects with product, perDay, trend, suggestion. Use trend values up, down, flat, or unknown. Do not include prose.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          range: context.range,
-          productVelocity: context.productVelocity,
-          topProducts: context.topProducts,
-        }),
-      },
-    ],
-  });
+  const context = await buildReportAiContext(filters);
+  const response = await createResponse(ai, [
+    {
+      role: "system",
+      content:
+        "You forecast cafe prep needs from filtered aggregate product velocity. Return only valid JSON: an array of up to 8 objects with product, perDay, trend, suggestion. Use trend values up, down, flat, or unknown. Do not include prose.",
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        range: context.range,
+        filters: context.filters,
+        productVelocity: context.productVelocity,
+        topProducts: context.topProducts,
+      }),
+    },
+  ], 700);
+  if (!response.ok) return response;
 
-  const parsed = parseForecast(response.output_text);
-  await cacheAiReport("inventory_forecast", range, parsed);
+  const parsed = parseForecast(response.data);
+  await cacheAiReport("inventory_forecast", filters, parsed);
   revalidatePath("/admin/reports");
   return { ok: true, data: parsed };
 }
@@ -110,32 +116,29 @@ export async function askReportQuestion(
   const ai = getOpenAI();
   if (!ai.ok) return { ok: false, error: ai.error };
 
-  const context = await buildReportAiContext(parseReportRange(params));
-  const response = await ai.client.responses.create({
-    model: ai.model,
-    max_output_tokens: 500,
-    input: [
-      {
-        role: "system",
-        content:
-          "Answer questions about this cafe using only the provided aggregate data. If the data cannot answer the question, say what is missing instead of guessing. Never mention customer PII.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({ question: cleaned, context }),
-      },
-    ],
-  });
+  const context = await buildReportAiContext(parseReportFilters(params));
+  const response = await createResponse(ai, [
+    {
+      role: "system",
+      content:
+        "Answer questions about this cafe using only the provided filtered aggregate data. If the data cannot answer the question, say what is missing instead of guessing. Mention the selected filters when relevant. Never mention customer PII.",
+    },
+    {
+      role: "user",
+      content: JSON.stringify({ question: cleaned, context }),
+    },
+  ], 500);
+  if (!response.ok) return response;
 
-  return { ok: true, data: response.output_text.trim() };
+  return { ok: true, data: response.data.trim() };
 }
 
-async function getCachedAiReport<T>(kind: string, range: ReturnType<typeof parseReportRange>) {
+async function getCachedAiReport<T>(kind: string, filters: ReportFilters) {
   const row = await db.query.aiReports.findFirst({
     where: and(
-      eq(aiReports.kind, kind),
-      eq(aiReports.rangeStart, range.start),
-      eq(aiReports.rangeEnd, range.end),
+      eq(aiReports.kind, cacheKind(kind, filters)),
+      eq(aiReports.rangeStart, filters.start),
+      eq(aiReports.rangeEnd, filters.end),
     ),
     orderBy: (report, { desc }) => [desc(report.createdAt)],
   });
@@ -145,15 +148,42 @@ async function getCachedAiReport<T>(kind: string, range: ReturnType<typeof parse
 
 async function cacheAiReport(
   kind: string,
-  range: ReturnType<typeof parseReportRange>,
+  filters: ReportFilters,
   payload: unknown,
 ) {
   await db.insert(aiReports).values({
-    kind,
-    rangeStart: range.start,
-    rangeEnd: range.end,
+    kind: cacheKind(kind, filters),
+    rangeStart: filters.start,
+    rangeEnd: filters.end,
     payload,
   });
+}
+
+function cacheKind(kind: string, filters: ReportFilters) {
+  return [
+    kind,
+    `employee:${filters.employeeId ?? "all"}`,
+    `session:${filters.sessionId ?? "all"}`,
+    `product:${filters.productId ?? "all"}`,
+  ].join("|");
+}
+
+async function createResponse(
+  ai: Extract<ReturnType<typeof getOpenAI>, { ok: true }>,
+  input: AiMessage[],
+  maxOutputTokens: number,
+): Promise<AiTextResult> {
+  try {
+    const response = await ai.client.responses.create({
+      model: ai.model,
+      max_output_tokens: maxOutputTokens,
+      input,
+    });
+    return { ok: true, data: response.output_text };
+  } catch (error) {
+    console.error("AI report generation failed", error);
+    return { ok: false, error: "AI insights could not be generated right now." };
+  }
 }
 
 function parseForecast(text: string): ForecastItem[] {

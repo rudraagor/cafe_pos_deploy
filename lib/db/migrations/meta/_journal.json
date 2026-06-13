@@ -15,6 +15,13 @@
       "when": 1781345311187,
       "tag": "0001_pretty_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781346445762,
+      "tag": "0002_lean_gateway",
+      "breakpoints": true
     }
   ]
 }

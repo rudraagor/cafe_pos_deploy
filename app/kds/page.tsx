@@ -20,7 +20,9 @@ export default async function KdsPage() {
         orderNumber: ticket.orderNumber,
         stage: ticket.kdsStage,
         status: ticket.status,
-        tableLabel: ticket.table
+        tableLabel: ticket.fulfillmentType === "takeaway"
+          ? "Takeaway"
+          : ticket.table
           ? `${ticket.table.floor?.name ?? "Floor"} / T${ticket.table.number}`
           : "Takeaway",
         sentToKitchenAt: (
@@ -28,7 +30,9 @@ export default async function KdsPage() {
         ).toISOString(),
         items: ticket.items.map((item) => ({
           id: item.id,
+          productId: item.productId,
           nameSnapshot: item.nameSnapshot,
+          categoryName: item.product?.category?.name ?? null,
           quantity: item.quantity,
           itemCompleted: item.itemCompleted,
         })),

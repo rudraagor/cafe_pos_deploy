@@ -24,6 +24,7 @@ export type ReceiptOrder = {
   tax: string;
   discountTotal: string;
   total: string;
+  fulfillmentType: "dine_in" | "takeaway";
   customer: { name: string; email: string | null } | null;
   employee: { name: string } | null;
   table: { number: number; floor: { name: string } | null } | null;
@@ -65,7 +66,9 @@ export function Receipt({
         <div>
           <p className="text-neutral-500">Table</p>
           <p className="font-medium">
-            {order.table
+            {order.fulfillmentType === "takeaway"
+              ? "Takeaway"
+              : order.table
               ? `${order.table.floor?.name ?? "Floor"} / T${order.table.number}`
               : "Takeaway"}
           </p>

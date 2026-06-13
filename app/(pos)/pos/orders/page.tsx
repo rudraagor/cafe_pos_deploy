@@ -23,6 +23,7 @@ export default async function PosOrdersPage() {
           total: o.total,
           status: o.status,
           kdsStage: o.kdsStage,
+          fulfillmentType: o.fulfillmentType,
           tableNumber: o.table?.number ?? null,
         }))}
       />

@@ -6,10 +6,19 @@ export type ReportRange = {
   end: Date;
 };
 
+export type ReportFilters = ReportRange & {
+  employeeId?: string;
+  sessionId?: string;
+  productId?: string;
+};
+
 export type ReportSearchParams = {
   preset?: string;
   start?: string;
   end?: string;
+  employeeId?: string;
+  sessionId?: string;
+  productId?: string;
 };
 
 export const rangePresets: { value: RangePreset; label: string }[] = [
@@ -56,17 +65,40 @@ export function parseReportRange(
   return { preset: "today", start: startOfDay(now), end: endOfDay(now) };
 }
 
-export function rangeToSearchParams(range: ReportRange) {
+export function parseReportFilters(
+  searchParams: ReportSearchParams = {},
+): ReportFilters {
+  return {
+    ...parseReportRange(searchParams),
+    employeeId: cleanFilterId(searchParams.employeeId),
+    sessionId: cleanFilterId(searchParams.sessionId),
+    productId: cleanFilterId(searchParams.productId),
+  };
+}
+
+export function rangeToSearchParams(range: ReportRange | ReportFilters) {
   const params = new URLSearchParams({ preset: range.preset });
   if (range.preset === "custom") {
     params.set("start", formatDateInput(range.start));
     params.set("end", formatDateInput(addDays(range.end, -1)));
   }
+  if ("employeeId" in range && range.employeeId) {
+    params.set("employeeId", range.employeeId);
+  }
+  if ("sessionId" in range && range.sessionId) {
+    params.set("sessionId", range.sessionId);
+  }
+  if ("productId" in range && range.productId) {
+    params.set("productId", range.productId);
+  }
   return params.toString();
 }
 
 export function formatDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function formatRangeLabel(range: ReportRange) {
@@ -83,6 +115,11 @@ function isRangePreset(value: unknown): value is RangePreset {
     value === "month" ||
     value === "custom"
   );
+}
+
+function cleanFilterId(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed !== "all" ? trimmed : undefined;
 }
 
 function parseDateBoundary(value: string | undefined, side: "start" | "end") {

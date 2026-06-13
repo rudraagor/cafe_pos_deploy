@@ -3,6 +3,7 @@ import {
   CalendarClock,
   CupSoda,
   LayoutGrid,
+  ShoppingBag,
   type LucideIcon,
   Monitor,
   Package,
@@ -31,6 +32,7 @@ export const adminNav: NavItem[] = [
 
 export const posNav: NavItem[] = [
   { label: "POS Order", href: "/pos", icon: CupSoda },
+  { label: "Takeaway", href: "/pos/takeaway", icon: ShoppingBag },
   { label: "Orders", href: "/pos/orders", icon: LayoutGrid },
   { label: "Customer", href: "/pos/customers", icon: Users },
   { label: "Table View", href: "/pos/tables", icon: LayoutGrid },

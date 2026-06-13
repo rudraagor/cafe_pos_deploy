@@ -70,22 +70,41 @@ export async function getFloorsWithTables() {
   return allFloors;
 }
 
-export async function getOccupiedTableIds(sessionId: string) {
+export async function getActiveTableOccupancies(sessionId: string) {
   const activeOrders = await db
-    .select({ tableId: orders.tableId })
+    .select({
+      tableId: orders.tableId,
+      orderId: orders.id,
+      orderNumber: orders.orderNumber,
+      status: orders.status,
+      kdsStage: orders.kdsStage,
+    })
     .from(orders)
     .where(
       and(
         eq(orders.sessionId, sessionId),
-        ne(orders.status, "paid"),
+        eq(orders.fulfillmentType, "dine_in"),
         ne(orders.status, "cancelled"),
         sql`${orders.tableId} is not null`,
+        sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
       ),
     );
 
-  return new Set(
-    activeOrders.map((o) => o.tableId).filter((id): id is string => !!id),
+  return new Map(
+    activeOrders.filter((order) => order.tableId).map((order) => [
+      order.tableId!,
+      {
+        orderId: order.orderId,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        kdsStage: order.kdsStage,
+      },
+    ]),
   );
+}
+
+export async function getOccupiedTableIds(sessionId: string) {
+  return new Set((await getActiveTableOccupancies(sessionId)).keys());
 }
 
 export async function getTableById(tableId: string) {
@@ -170,6 +189,13 @@ export async function getKitchenTickets() {
       table: { with: { floor: true } },
       items: {
         where: eq(orderItems.isKitchenItem, true),
+        with: {
+          product: {
+            with: {
+              category: true,
+            },
+          },
+        },
         orderBy: (item, { asc }) => [asc(item.createdAt)],
       },
     },

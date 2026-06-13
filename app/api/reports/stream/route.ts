@@ -3,11 +3,17 @@ import {
   realtimeBus,
   type ReportsChangedPayload,
 } from "@/lib/realtime/bus";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  const session = await auth();
+  if (session?.user?.role !== "admin") {
+    return new Response("Forbidden", { status: 403 });
+  }
+
   const encoder = new TextEncoder();
   let keepAlive: ReturnType<typeof setInterval> | null = null;
   let listener: ((payload: ReportsChangedPayload) => void) | null = null;

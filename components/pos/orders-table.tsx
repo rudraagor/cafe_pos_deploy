@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DataTableShell } from "@/components/admin/data-table-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ export type OrderRow = {
   total: string;
   status: "draft" | "paid" | "cancelled";
   kdsStage: "to_cook" | "preparing" | "completed";
+  fulfillmentType: "dine_in" | "takeaway";
   tableNumber: number | null;
 };
 
@@ -79,9 +80,10 @@ export function OrdersTable({ orders }: { orders: OrderRow[] }) {
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
 
-  useEffect(() => {
+  function handleSearchChange(value: string) {
+    setSearch(value);
     setPage(1);
-  }, [search]);
+  }
 
   const pageRows = useMemo(
     () =>
@@ -98,7 +100,7 @@ export function OrdersTable({ orders }: { orders: OrderRow[] }) {
   return (
     <DataTableShell
       searchValue={search}
-      onSearchChange={setSearch}
+      onSearchChange={handleSearchChange}
       searchPlaceholder="Search order, customer, date..."
       empty={filtered.length === 0}
       emptyTitle="No orders this session"
@@ -137,7 +139,11 @@ export function OrdersTable({ orders }: { orders: OrderRow[] }) {
               </TableCell>
               <TableCell>{order.customerName ?? "—"}</TableCell>
               <TableCell>
-                {order.tableNumber != null ? `T${order.tableNumber}` : "—"}
+                {order.fulfillmentType === "takeaway"
+                  ? "Takeaway"
+                  : order.tableNumber != null
+                    ? `T${order.tableNumber}`
+                    : "—"}
               </TableCell>
               <TableCell>{formatMoney(Number(order.total))}</TableCell>
               <TableCell>

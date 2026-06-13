@@ -18,6 +18,10 @@ export type FloorWithTables = {
 type TableGridProps = {
   floors: FloorWithTables[];
   occupiedTableIds: string[];
+  occupiedOrdersByTable?: Record<
+    string,
+    { orderId: string; orderNumber: string; status: string; kdsStage: string }
+  >;
   onSelectTable?: (tableId: string) => void;
   linkPrefix?: string;
 };
@@ -25,6 +29,7 @@ type TableGridProps = {
 export function TableGrid({
   floors,
   occupiedTableIds,
+  occupiedOrdersByTable = {},
   onSelectTable,
   linkPrefix = "/pos?table=",
 }: TableGridProps) {
@@ -33,6 +38,11 @@ export function TableGrid({
   const occupied = new Set(occupiedTableIds);
 
   function handleSelect(tableId: string) {
+    const activeOrder = occupiedOrdersByTable[tableId];
+    if (activeOrder) {
+      router.push(`/pos/orders/${activeOrder.orderId}`);
+      return;
+    }
     if (onSelectTable) {
       onSelectTable(tableId);
       return;
@@ -56,6 +66,7 @@ export function TableGrid({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {floor.tables.map((table) => {
               const isOccupied = occupied.has(table.id);
+              const activeOrder = occupiedOrdersByTable[table.id];
               return (
                 <button
                   key={table.id}
@@ -74,7 +85,7 @@ export function TableGrid({
                   </span>
                   {isOccupied ? (
                     <span className="mt-1 text-[10px] font-medium text-amber-600">
-                      Occupied
+                      {activeOrder ? "View order" : "Occupied"}
                     </span>
                   ) : null}
                 </button>

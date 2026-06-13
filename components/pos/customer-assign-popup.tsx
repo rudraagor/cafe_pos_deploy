@@ -17,6 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCartStore } from "@/lib/pos/cart-store";
+import type { FieldErrors } from "@/lib/action-result";
+import type { CustomerInput } from "@/lib/validations/customers";
 
 type CustomerOption = { id: string; name: string; email: string | null };
 
@@ -38,6 +40,9 @@ export function CustomerAssignPopup({
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [fieldErrors, setFieldErrors] =
+    useState<FieldErrors<keyof CustomerInput>>();
   const [isPending, startTransition] = useTransition();
 
   const filtered = customers.filter((c) =>
@@ -54,10 +59,14 @@ export function CustomerAssignPopup({
     if (!newName.trim()) return;
     const formData = new FormData();
     formData.set("name", newName.trim());
+    formData.set("email", newEmail.trim());
+    formData.set("phone", "");
+    setFieldErrors(undefined);
 
     startTransition(async () => {
       const result = await createCustomer(formData);
       if (!result.ok) {
+        setFieldErrors(result.fieldErrors);
         toast.error(result.error);
         return;
       }
@@ -70,6 +79,7 @@ export function CustomerAssignPopup({
         onOpenChange(false);
         setShowCreate(false);
         setNewName("");
+        setNewEmail("");
         router.refresh();
         return;
       }
@@ -77,6 +87,7 @@ export function CustomerAssignPopup({
       router.refresh();
       setShowCreate(false);
       setNewName("");
+      setNewEmail("");
     });
   }
 
@@ -98,13 +109,42 @@ export function CustomerAssignPopup({
                 id="new-customer-name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
+                aria-invalid={!!fieldErrors?.name?.[0]}
               />
+              {fieldErrors?.name?.[0] ? (
+                <p className="text-destructive text-sm">
+                  {fieldErrors.name[0]}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-customer-email">Email for receipt</Label>
+              <Input
+                id="new-customer-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="customer@example.com"
+                aria-invalid={!!fieldErrors?.email?.[0]}
+              />
+              {fieldErrors?.email?.[0] ? (
+                <p className="text-destructive text-sm">
+                  {fieldErrors.email[0]}
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Add an email if the customer wants a digital receipt.
+                </p>
+              )}
             </div>
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowCreate(false)}
+                onClick={() => {
+                  setShowCreate(false);
+                  setFieldErrors(undefined);
+                }}
               >
                 Cancel
               </Button>

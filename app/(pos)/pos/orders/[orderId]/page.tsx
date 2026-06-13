@@ -30,9 +30,11 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   if (!order) notFound();
 
   const editPayload =
-    order.status === "draft" && order.tableId
+    order.status === "draft" &&
+    (order.fulfillmentType === "takeaway" || order.tableId)
       ? {
           orderId: order.id,
+          fulfillmentType: order.fulfillmentType,
           tableId: order.tableId,
           items: order.items
             .filter((item) => item.productId)
@@ -55,6 +57,11 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
           customerName: order.customer?.name,
       }
       : undefined;
+  const kitchenItems = order.items.filter((item) => item.isKitchenItem);
+  const paymentReady =
+    kitchenItems.length === 0 ||
+    (order.kdsStage === "completed" &&
+      kitchenItems.every((item) => item.itemCompleted));
   const upiMethod = paymentMethods.find(
     (method) => method.type === "upi" && method.upiId,
   );
@@ -98,7 +105,9 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
         <div>
           <dt className="text-muted-foreground">Table</dt>
           <dd className="font-medium">
-            {order.table
+            {order.fulfillmentType === "takeaway"
+              ? "Takeaway"
+              : order.table
               ? `${order.table.floor?.name ?? ""} · T${order.table.number}`
               : "—"}
           </dd>
@@ -178,6 +187,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
         upiQrDataUrl={upiQrDataUrl}
         defaultPayOpen={order.status === "draft" && pay === "1"}
         customerEmail={order.customer?.email}
+        paymentReady={paymentReady}
       />
     </div>
   );

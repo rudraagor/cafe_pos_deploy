@@ -1,0 +1,2 @@
+CREATE TYPE "public"."order_fulfillment_type" AS ENUM('dine_in', 'takeaway');--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "fulfillment_type" "order_fulfillment_type" DEFAULT 'dine_in' NOT NULL;

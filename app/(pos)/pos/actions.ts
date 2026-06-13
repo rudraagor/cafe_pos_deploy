@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { requireUser } from "@/lib/auth";
@@ -27,7 +27,7 @@ import {
   getSessionClosingAmount,
 } from "@/lib/pos/session";
 import { getAppUrl } from "@/lib/receipt-brand";
-import { publishKdsChanged } from "@/lib/realtime/publish";
+import { publishKdsChanged, publishReportsChanged } from "@/lib/realtime/publish";
 import { customerSchema } from "@/lib/validations/customers";
 import { sendToKitchenSchema } from "@/lib/validations/order";
 import { paymentSchema } from "@/lib/validations/payment";
@@ -106,6 +106,8 @@ export async function closeSession(): Promise<CloseSessionResult> {
   revalidatePath("/pos");
   revalidatePath("/pos/orders");
   revalidatePath("/pos/tables");
+  revalidatePath("/admin/reports");
+  publishReportsChanged({ sessionId: session.id });
 
   return {
     ok: true,
@@ -160,7 +162,8 @@ export async function sendToKitchen(
     };
   }
 
-  const { tableId, orderId, items, couponCode, customerId } = parsed.data;
+  const { fulfillmentType, tableId, orderId, items, couponCode, customerId } =
+    parsed.data;
 
   const productIds = items.map((i) => i.productId);
   const dbProducts = await getProductsByIds(productIds);
@@ -207,7 +210,8 @@ export async function sendToKitchen(
 
   const orderValues = {
     sessionId: session.id,
-    tableId,
+    tableId: fulfillmentType === "dine_in" ? tableId : null,
+    fulfillmentType,
     customerId: customerId ?? null,
     employeeId: user.id,
     couponId: coupon?.id ?? null,
@@ -241,6 +245,22 @@ export async function sendToKitchen(
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       savedOrderId = await db.transaction(async (tx) => {
+        if (fulfillmentType === "dine_in" && tableId) {
+          const conflictingOrder = await tx.query.orders.findFirst({
+            where: and(
+              eq(orders.sessionId, session.id),
+              eq(orders.tableId, tableId),
+              eq(orders.fulfillmentType, "dine_in"),
+              ne(orders.status, "cancelled"),
+              orderId ? ne(orders.id, orderId) : sql`true`,
+              sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
+            ),
+          });
+          if (conflictingOrder) {
+            throw new Error("TABLE_OCCUPIED");
+          }
+        }
+
         if (orderId) {
           const existing = await tx.query.orders.findFirst({
             where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
@@ -272,6 +292,12 @@ export async function sendToKitchen(
       break;
     } catch (error) {
       lastCreateError = error;
+      if (error instanceof Error && error.message === "TABLE_OCCUPIED") {
+        return {
+          ok: false,
+          error: "This table already has an active order.",
+        };
+      }
       if (orderId || !isUniqueViolation(error)) {
         return {
           ok: false,
@@ -284,6 +310,12 @@ export async function sendToKitchen(
     }
   }
   } catch (error) {
+    if (error instanceof Error && error.message === "TABLE_OCCUPIED") {
+      return {
+        ok: false,
+        error: "This table already has an active order.",
+      };
+    }
     return {
       ok: false,
       error: actionErrorMessage(
@@ -400,10 +432,23 @@ export async function takePayment(
   const paymentResult = await db.transaction(async (tx) => {
     const order = await tx.query.orders.findFirst({
       where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
-      with: { customer: true },
+      with: { customer: true, items: true },
     });
     if (!order) {
       return { ok: false as const, error: "Draft order not found." };
+    }
+
+    const kitchenItems = order.items.filter((item) => item.isKitchenItem);
+    const hasKitchenItems = kitchenItems.length > 0;
+    const kitchenReady =
+      !hasKitchenItems ||
+      (order.kdsStage === "completed" &&
+        kitchenItems.every((item) => item.itemCompleted));
+    if (!kitchenReady) {
+      return {
+        ok: false as const,
+        error: "Food must be marked ready in KDS before payment.",
+      };
     }
 
     const total = Number(order.total);
@@ -459,6 +504,7 @@ export async function takePayment(
   revalidatePath(`/receipt/${paymentResult.orderId}`);
   revalidatePath("/kds");
   publishKdsChanged({ orderId: paymentResult.orderId });
+  publishReportsChanged({ orderId: paymentResult.orderId });
 
   const receiptUrl = `${getAppUrl()}/receipt/${paymentResult.orderId}`;
   const email = await sendReceiptEmail(paymentResult.orderId);

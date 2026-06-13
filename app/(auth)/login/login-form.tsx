@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { authenticate } from "@/app/(auth)/actions";
@@ -66,10 +65,7 @@ export function LoginForm() {
         <CardFooter className="mt-4 flex-col gap-3">
           <SubmitButton />
           <p className="text-center text-sm text-muted-foreground">
-            No account?{" "}
-            <Link href="/signup" className="text-foreground underline">
-              Sign up
-            </Link>
+            Ask an admin to create employee or admin accounts.
           </p>
         </CardFooter>
       </form>

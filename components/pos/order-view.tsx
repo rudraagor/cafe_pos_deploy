@@ -1,5 +1,7 @@
 "use client";
 
+import { ClipboardList, Grid2X2, ShoppingBag, Utensils } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { FloorPopup } from "@/components/pos/floor-popup";
@@ -10,7 +12,10 @@ import {
   type PosProduct,
 } from "@/components/pos/product-grid";
 import type { FloorWithTables } from "@/components/pos/table-grid";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { TAKEAWAY_CART_ID } from "@/lib/pos/cart-store";
 import type { PromotionInput } from "@/lib/pos/pricing";
+import { cn } from "@/lib/utils";
 
 type CustomerOption = { id: string; name: string; email: string | null };
 
@@ -22,6 +27,11 @@ type OrderViewProps = {
   customers: CustomerOption[];
   floors: FloorWithTables[];
   occupiedTableIds: string[];
+  occupiedOrdersByTable?: Record<
+    string,
+    { orderId: string; orderNumber: string; status: string; kdsStage: string }
+  >;
+  fulfillmentType?: "dine_in" | "takeaway";
 };
 
 export function OrderView({
@@ -32,21 +42,84 @@ export function OrderView({
   customers,
   floors,
   occupiedTableIds,
+  occupiedOrdersByTable,
+  fulfillmentType = "dine_in",
 }: OrderViewProps) {
   const [floorOpen, setFloorOpen] = useState(false);
   const searchQuery = "";
+  const cartId = fulfillmentType === "takeaway" ? TAKEAWAY_CART_ID : tableId;
 
-  if (!tableId) {
+  if (!cartId) {
     return (
       <>
-        <div className="text-muted-foreground flex min-h-[calc(100vh-3.5rem)] items-center justify-center p-6 text-sm">
-          Select a table to start an order.
+        <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center p-6">
+          <div className="w-full max-w-2xl space-y-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Start an order
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                Choose dine-in, takeaway, or jump back into active work.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button
+                type="button"
+                className="h-24 justify-start gap-3 px-4"
+                onClick={() => setFloorOpen(true)}
+              >
+                <Utensils className="size-5" />
+                <span className="text-left">
+                  <span className="block font-semibold">Select Table</span>
+                  <span className="block text-xs opacity-80">
+                    Start dine-in service
+                  </span>
+                </span>
+              </Button>
+              <Link
+                href="/pos/takeaway"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "h-24 justify-start gap-3 px-4",
+                )}
+              >
+                <ShoppingBag className="size-5" />
+                <span className="text-left">
+                  <span className="block font-semibold">Takeaway</span>
+                  <span className="text-muted-foreground block text-xs">
+                    No table required
+                  </span>
+                </span>
+              </Link>
+              <Link
+                href="/pos/orders"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "h-20 justify-start gap-3 px-4",
+                )}
+              >
+                <ClipboardList className="size-5" />
+                Orders
+              </Link>
+              <Link
+                href="/pos/tables"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "h-20 justify-start gap-3 px-4",
+                )}
+              >
+                <Grid2X2 className="size-5" />
+                Table View
+              </Link>
+            </div>
+          </div>
         </div>
         <FloorPopup
-          open
+          open={floorOpen}
           onOpenChange={setFloorOpen}
           floors={floors}
           occupiedTableIds={occupiedTableIds}
+          occupiedOrdersByTable={occupiedOrdersByTable}
         />
       </>
     );
@@ -58,14 +131,16 @@ export function OrderView({
         <ProductGrid
           products={products}
           categories={categories}
-          tableId={tableId}
+          tableId={cartId}
           searchQuery={searchQuery}
         />
         <div className="hidden border-l lg:block">
-          <CartPanel tableId={tableId} promotions={promotions} />
+          <CartPanel tableId={cartId} promotions={promotions} />
         </div>
         <OrderSummary
-          tableId={tableId}
+          tableId={cartId}
+          orderTableId={fulfillmentType === "dine_in" ? tableId : null}
+          fulfillmentType={fulfillmentType}
           promotions={promotions}
           customers={customers}
         />
@@ -75,6 +150,7 @@ export function OrderView({
         onOpenChange={setFloorOpen}
         floors={floors}
         occupiedTableIds={occupiedTableIds}
+        occupiedOrdersByTable={occupiedOrdersByTable}
       />
     </>
   );

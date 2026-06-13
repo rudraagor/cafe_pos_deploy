@@ -1,26 +1,18 @@
+import { CartStoreHydration } from "@/components/pos/cart-store-hydration";
+import { OrderView } from "@/components/pos/order-view";
+import { SessionScreen } from "@/components/pos/session-screen";
 import { requireUser } from "@/lib/auth";
 import {
   getActiveCategories,
   getActiveProducts,
   getActivePromotions,
   getCustomers,
-  getActiveTableOccupancies,
   getFloorsWithTables,
 } from "@/lib/pos/queries";
-import { SessionScreen } from "@/components/pos/session-screen";
-import { CartStoreHydration } from "@/components/pos/cart-store-hydration";
-import { OrderView } from "@/components/pos/order-view";
 import { getLastClosedSession, getOpenSessionForUser } from "@/lib/pos/session";
-import { redirect } from "next/navigation";
 
-type PosPageProps = {
-  searchParams: Promise<{ table?: string; edit?: string }>;
-};
-
-export default async function PosOrderPage({ searchParams }: PosPageProps) {
+export default async function TakeawayPage() {
   const user = await requireUser();
-  const { table: tableId, edit: editOrderId } = await searchParams;
-
   const openSession = await getOpenSessionForUser(user.id);
   if (!openSession) {
     const lastClosed = await getLastClosedSession(user.id);
@@ -28,40 +20,27 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
       <SessionScreen
         lastClosedAt={lastClosed?.closedAt?.toISOString() ?? null}
         lastClosingAmount={
-          lastClosed?.closingAmount
-            ? Number(lastClosed.closingAmount)
-            : null
+          lastClosed?.closingAmount ? Number(lastClosed.closingAmount) : null
         }
       />
     );
   }
 
-  const [
-    products,
-    categories,
-    promotions,
-    customers,
-    floors,
-    activeTableOrders,
-  ] = await Promise.all([
-    getActiveProducts(),
-    getActiveCategories(),
-    getActivePromotions(),
-    getCustomers(),
-    getFloorsWithTables(),
-    getActiveTableOccupancies(openSession.id),
-  ]);
-  const occupiedOrdersByTable = Object.fromEntries(activeTableOrders);
-  const activeOrder = tableId ? occupiedOrdersByTable[tableId] : null;
-  if (activeOrder && activeOrder.orderId !== editOrderId) {
-    redirect(`/pos/orders/${activeOrder.orderId}`);
-  }
+  const [products, categories, promotions, customers, floors] =
+    await Promise.all([
+      getActiveProducts(),
+      getActiveCategories(),
+      getActivePromotions(),
+      getCustomers(),
+      getFloorsWithTables(),
+    ]);
 
   return (
     <>
       <CartStoreHydration />
       <OrderView
-        tableId={tableId ?? null}
+        tableId={null}
+        fulfillmentType="takeaway"
         products={products.map((p) => ({
           id: p.id,
           name: p.name,
@@ -88,8 +67,7 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
           name: f.name,
           tables: f.tables,
         }))}
-        occupiedTableIds={Object.keys(occupiedOrdersByTable)}
-        occupiedOrdersByTable={occupiedOrdersByTable}
+        occupiedTableIds={[]}
       />
     </>
   );

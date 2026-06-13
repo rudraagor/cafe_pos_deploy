@@ -23,6 +23,10 @@ export const orderStatus = pgEnum("order_status", [
   "paid",
   "cancelled",
 ]);
+export const orderFulfillmentType = pgEnum("order_fulfillment_type", [
+  "dine_in",
+  "takeaway",
+]);
 export const kdsStage = pgEnum("kds_stage", [
   "to_cook",
   "preparing",
@@ -180,6 +184,9 @@ export const orders = pgTable("orders", {
   tableId: uuid("table_id").references(() => tables.id, {
     onDelete: "set null",
   }),
+  fulfillmentType: orderFulfillmentType("fulfillment_type")
+    .notNull()
+    .default("dine_in"),
   customerId: uuid("customer_id").references(() => customers.id, {
     onDelete: "set null",
   }),
