@@ -11,8 +11,8 @@ This interactive matrix tracks our full-stack compliance against the official re
 - [x] **[2.5] Floor Plan & Tables** — Configures restaurant layouts mapping directly to the active terminal grid.
 - [x] **[2.6] Coupons & Promos** — Handles manual code inputs + automated volume/amount triggers.
 - [x] **[2.7] Employee Directory** — Role assignment, active password resets, and account archiving.
-- [ ] **[2.8] Session Lifecycle** — Logs cash drawer balances, shift starts, and final closing sales summary.
-- [ ] **[2.9] Analytics Dashboard** — Real-time charts, metrics filtering, and PDF/XLS report export.
+- [x] **[2.8] Session Lifecycle** — Logs cash drawer balances, shift starts, and final closing sales summary.
+- [x] **[2.9] Analytics Dashboard** — Real-time charts, metrics filtering, and PDF/XLS report export.
 
 ### 💻 2. POS Terminal 
 - [x] **[3.1] Navigation Header** — Live search, current table indicator, and quick-menu navigation dropdown.
@@ -25,6 +25,6 @@ This interactive matrix tracks our full-stack compliance against the official re
 - [x] **[3.8] Customer CRM** — Guest registration and direct linking to digital checkout receipts.
 
 ### 🍳 3. Kitchen Display System (KDS)
-- [ ] **[4.0] Live Order Pipeline** — Real-time order tickets syncing instantly across To Cook ➔ Preparing ➔ Completed.
-- [ ] **[4.0] Ticket Aging Visuals** — Automatic color degradation (Green ➔ Amber ➔ Red) based on live elapsed time.
-- [ ] **[4.0] Granular Tracking** — Interactive line-item click with text-strikethrough state for partial ticket prep.
+- [x] **[4.0] Live Order Pipeline** — Real-time order tickets syncing instantly across To Cook ➔ Preparing ➔ Completed.
+- [x] **[4.0] Ticket Aging Visuals** — Automatic color degradation (Green ➔ Amber ➔ Red) based on live elapsed time.
+- [x] **[4.0] Granular Tracking** — Interactive line-item click with text-strikethrough state for partial ticket prep.
