@@ -4,13 +4,13 @@ This interactive matrix tracks our full-stack compliance against the official re
 
 
 ### 🧱 1. Backend Administration (User Portal)
-- [ ] **[2.1] Login & Signup** — Opens active POS session automatically on success.
-- [ ] **[2.2] Product CRUD** — Supports product name, price, tax, and unit of measure with inline category creation.
-- [ ] **[2.3] Category Color Sync** — Global color system reflecting instantly across views on update.
-- [ ] **[2.4] Payment Configs** — Feature toggles for Cash, Card, and dynamic UPI QR generation.
-- [ ] **[2.5] Floor Plan & Tables** — Configures restaurant layouts mapping directly to the active terminal grid.
+- [x] **[2.1] Login & Signup** — Opens active POS session automatically on success.
+- [x] **[2.2] Product CRUD** — Supports product name, price, tax, and unit of measure with inline category creation.
+- [x] **[2.3] Category Color Sync** — Global color system reflecting instantly across views on update.
+- [x] **[2.4] Payment Configs** — Feature toggles for Cash, Card, and dynamic UPI QR generation.
+- [x] **[2.5] Floor Plan & Tables** — Configures restaurant layouts mapping directly to the active terminal grid.
 - [ ] **[2.6] Coupons & Promos** — Handles manual code inputs + automated volume/amount triggers.
-- [ ] **[2.7] Employee Directory** — Role assignment, active password resets, and account archiving.
+- [x] **[2.7] Employee Directory** — Role assignment, active password resets, and account archiving.
 - [ ] **[2.8] Session Lifecycle** — Logs cash drawer balances, shift starts, and final closing sales summary.
 - [ ] **[2.9] Analytics Dashboard** — Real-time charts, metrics filtering, and PDF/XLS report export.
 
