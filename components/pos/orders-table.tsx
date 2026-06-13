@@ -29,6 +29,7 @@ export type OrderRow = {
   kdsStage: "to_cook" | "preparing" | "completed";
   fulfillmentType: "dine_in" | "takeaway";
   tableNumber: number | null;
+  tableLabel: string;
 };
 
 const statusVariant: Record<
@@ -139,11 +140,7 @@ export function OrdersTable({ orders }: { orders: OrderRow[] }) {
               </TableCell>
               <TableCell>{order.customerName ?? "—"}</TableCell>
               <TableCell>
-                {order.fulfillmentType === "takeaway"
-                  ? "Takeaway"
-                  : order.tableNumber != null
-                    ? `T${order.tableNumber}`
-                    : "—"}
+                {order.tableLabel}
               </TableCell>
               <TableCell>{formatMoney(Number(order.total))}</TableCell>
               <TableCell>

@@ -4,7 +4,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { createCustomer } from "@/app/(pos)/pos/actions";
+import { createCustomer } from "@/app/(dashboard)/pos/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

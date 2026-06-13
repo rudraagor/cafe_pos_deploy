@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { BarChart3, LogOut, Menu } from "lucide-react";
 import { toast } from "sonner";
 import { logout } from "@/app/(auth)/actions";
-import { closeSession } from "@/app/(pos)/pos/actions";
+import { closeSession } from "@/app/(dashboard)/pos/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,14 +18,11 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { adminNav } from "@/lib/nav";
 import { formatMoney } from "@/lib/pos/pricing";
+import { cn } from "@/lib/utils";
 
 type CloseSummary = {
   totalOrders: number;
@@ -34,7 +31,15 @@ type CloseSummary = {
   closedAt: Date;
 };
 
-export function PosHamburgerMenu({ isAdmin = false }: { isAdmin?: boolean }) {
+export function PosHamburgerMenu({
+  isAdmin = false,
+  collapsed = false,
+  variant = "sidebar",
+}: {
+  isAdmin?: boolean;
+  collapsed?: boolean;
+  variant?: "sidebar" | "header";
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [summary, setSummary] = useState<CloseSummary | null>(null);
@@ -56,29 +61,26 @@ export function PosHamburgerMenu({ isAdmin = false }: { isAdmin?: boolean }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="rounded-md p-1.5 hover:bg-muted"
-          aria-label="Menu"
+          className={cn(
+            "rounded-lg transition-colors",
+            variant === "header"
+              ? "text-foreground/70 hover:bg-muted hover:text-foreground p-2"
+              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            collapsed ? "p-2" : variant === "sidebar" ? "w-full p-1.5" : "p-2",
+          )}
+          aria-label="POS session menu"
+          title="Session menu"
         >
-          <Menu className="size-5" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          {isAdmin ? (
-            <>
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Manage</DropdownMenuLabel>
-                {adminNav.map((item) => (
-                  <DropdownMenuItem
-                    key={item.href}
-                    onClick={() => router.push(item.href)}
-                  >
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-            </>
+          <Menu className={cn("mx-auto", collapsed ? "size-5" : "size-5")} />
+          {!collapsed ? (
+            <span className="sr-only">Session menu</span>
           ) : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align={collapsed ? "start" : "end"}
+          side={collapsed ? "right" : "top"}
+          className="w-56"
+        >
           <DropdownMenuItem onClick={handleCloseSession} disabled={isPending}>
             Close session
           </DropdownMenuItem>
@@ -112,17 +114,21 @@ export function PosHamburgerMenu({ isAdmin = false }: { isAdmin?: boolean }) {
             </div>
           ) : null}
           <DialogFooter className="gap-2 sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setSummary(null);
-                router.push("/admin/reports");
-              }}
-            >
-              <BarChart3 className="size-4" />
-              View reports
-            </Button>
+            {isAdmin ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSummary(null);
+                  router.push("/admin/reports");
+                }}
+              >
+                <BarChart3 className="size-4" />
+                View reports
+              </Button>
+            ) : (
+              <span />
+            )}
             <div className="flex gap-2">
               <Button
                 type="button"

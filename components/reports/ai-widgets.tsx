@@ -15,7 +15,7 @@ import {
   askReportQuestion,
   generateDailyBriefing,
   generateInventoryForecast,
-} from "@/app/(admin)/admin/reports/ai-actions";
+} from "@/app/(dashboard)/admin/reports/ai-actions";
 import type { ForecastItem } from "@/lib/reports/forecast-fallback";
 import { AiBriefingDialog } from "@/components/reports/ai-briefing-dialog";
 import { markdownPreview } from "@/components/reports/ai-markdown";

@@ -3,9 +3,8 @@
 import { ClipboardList, Grid2X2, ShoppingBag, Utensils } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { CartPanel } from "@/components/pos/cart-panel";
 import { FloorPopup } from "@/components/pos/floor-popup";
-import { OrderSummary } from "@/components/pos/order-summary";
+import { PosCartColumn } from "@/components/pos/pos-cart-column";
 import {
   ProductGrid,
   type PosCategory,
@@ -14,6 +13,7 @@ import {
 import type { FloorWithTables } from "@/components/pos/table-grid";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { TAKEAWAY_CART_ID } from "@/lib/pos/cart-store";
+import type { TableOccupancy } from "@/lib/pos/queries";
 import type { PromotionInput } from "@/lib/pos/pricing";
 import { cn } from "@/lib/utils";
 
@@ -21,21 +21,24 @@ type CustomerOption = { id: string; name: string; email: string | null };
 
 type OrderViewProps = {
   tableId: string | null;
+  tableIds?: string[];
+  reservationId?: string | null;
+  initialReservationCustomerName?: string | null;
   products: PosProduct[];
   categories: PosCategory[];
   promotions: PromotionInput[];
   customers: CustomerOption[];
   floors: FloorWithTables[];
   occupiedTableIds: string[];
-  occupiedOrdersByTable?: Record<
-    string,
-    { orderId: string; orderNumber: string; status: string; kdsStage: string }
-  >;
+  occupiedOrdersByTable?: Record<string, TableOccupancy>;
   fulfillmentType?: "dine_in" | "takeaway";
 };
 
 export function OrderView({
   tableId,
+  tableIds = [],
+  reservationId,
+  initialReservationCustomerName,
   products,
   categories,
   promotions,
@@ -46,13 +49,12 @@ export function OrderView({
   fulfillmentType = "dine_in",
 }: OrderViewProps) {
   const [floorOpen, setFloorOpen] = useState(false);
-  const searchQuery = "";
+  const [searchQuery, setSearchQuery] = useState("");
   const cartId = fulfillmentType === "takeaway" ? TAKEAWAY_CART_ID : tableId;
-
   if (!cartId) {
     return (
       <>
-        <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center p-6">
+        <div className="flex min-h-full items-center justify-center p-6">
           <div className="w-full max-w-2xl space-y-4">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">
@@ -127,23 +129,26 @@ export function OrderView({
 
   return (
     <>
-      <div className="grid h-[calc(100vh-3.5rem)] grid-cols-1 lg:grid-cols-[1fr_320px_280px]">
+      <div className="grid h-full min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_minmax(320px,400px)]">
         <ProductGrid
           products={products}
           categories={categories}
           tableId={cartId}
           searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
-        <div className="hidden border-l lg:block">
-          <CartPanel tableId={cartId} promotions={promotions} />
+        <div className="hidden h-full min-h-0 overflow-hidden lg:block">
+          <PosCartColumn
+            tableId={cartId}
+            orderTableId={fulfillmentType === "dine_in" ? tableId : null}
+            orderTableIds={fulfillmentType === "dine_in" ? tableIds : []}
+            reservationId={reservationId}
+            reservationCustomerName={initialReservationCustomerName}
+            fulfillmentType={fulfillmentType}
+            promotions={promotions}
+            customers={customers}
+          />
         </div>
-        <OrderSummary
-          tableId={cartId}
-          orderTableId={fulfillmentType === "dine_in" ? tableId : null}
-          fulfillmentType={fulfillmentType}
-          promotions={promotions}
-          customers={customers}
-        />
       </div>
       <FloorPopup
         open={floorOpen}

@@ -1,5 +1,6 @@
 import { formatMoney } from "@/lib/pos/pricing";
 import { modifierLabel } from "@/lib/pos/modifiers";
+import { formatMergedTableLabel } from "@/lib/pos/table-labels";
 
 type ReceiptItem = {
   nameSnapshot: string;
@@ -31,6 +32,10 @@ export type ReceiptOrder = {
   customer: { name: string; email: string | null } | null;
   employee: { name: string } | null;
   table: { number: number; floor: { name: string } | null } | null;
+  orderTables: {
+    isPrimary: boolean;
+    table: { number: number; floor: { name: string } | null };
+  }[];
   coupon: { code: string } | null;
   items: ReceiptItem[];
   payments: ReceiptPayment[];
@@ -71,9 +76,16 @@ export function Receipt({
           <p className="font-medium">
             {order.fulfillmentType === "takeaway"
               ? "Takeaway"
-              : order.table
-              ? `${order.table.floor?.name ?? "Floor"} / T${order.table.number}`
-              : "Takeaway"}
+              : order.orderTables.length > 0
+                ? formatMergedTableLabel(
+                    order.orderTables
+                      .slice()
+                      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+                      .map((row) => row.table),
+                  )
+                : order.table
+                  ? `${order.table.floor?.name ?? "Floor"} / T${order.table.number}`
+                  : "Takeaway"}
           </p>
         </div>
         <div>

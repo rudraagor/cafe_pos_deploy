@@ -4,7 +4,7 @@ import { Loader2, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { openSession } from "@/app/(pos)/pos/actions";
+import { openSession } from "@/app/(dashboard)/pos/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,7 +40,7 @@ export function SessionScreen({
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center p-6">
+    <div className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle>POS Session</CardTitle>

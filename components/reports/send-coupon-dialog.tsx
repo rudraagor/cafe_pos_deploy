@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   listActiveCoupons,
   sendCouponOffer,
-} from "@/app/(admin)/admin/reports/marketing-actions";
+} from "@/app/(dashboard)/admin/reports/marketing-actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

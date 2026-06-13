@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState, useTransition, type ReactElement } from "react";
 import { toast } from "sonner";
-import { takePayment } from "@/app/(pos)/pos/actions";
+import { takePayment } from "@/app/(dashboard)/pos/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

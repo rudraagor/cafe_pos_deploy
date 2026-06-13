@@ -4,17 +4,44 @@ import { db } from "@/lib/db";
 import {
   categories,
   coupons,
+  floors,
   orders,
   orderItems,
   paymentMethods,
   products,
   promotions,
+  reservations,
   tables,
 } from "@/lib/db/schema";
 import type * as schema from "@/lib/db/schema";
+import { expireStaleReservations } from "@/lib/pos/reservations";
+import { formatMergedTableLabel } from "@/lib/pos/table-labels";
 import type { PromotionInput } from "./pricing";
 
 type DbClient = NodePgDatabase<typeof schema>;
+
+export type TableOccupancy =
+  | {
+      kind: "order";
+      orderId: string;
+      orderNumber: string;
+      status: string;
+      kdsStage: string;
+      label: string;
+      tableIds: string[];
+      primaryTableId: string;
+    }
+  | {
+      kind: "reservation";
+      reservationId: string;
+      customerName: string;
+      status: string;
+      label: string;
+      tableIds: string[];
+      primaryTableId: string;
+      startAt: string;
+      durationMinutes: number;
+    };
 
 export async function getActiveProducts() {
   return db
@@ -24,6 +51,7 @@ export async function getActiveProducts() {
       price: products.price,
       taxRate: products.taxRate,
       isKitchenItem: products.isKitchenItem,
+      isOutOfStock: products.isOutOfStock,
       supportedModifiers: products.supportedModifiers,
       categoryId: products.categoryId,
       categoryName: categories.name,
@@ -72,36 +100,90 @@ export async function getFloorsWithTables() {
 }
 
 export async function getActiveTableOccupancies(sessionId: string) {
-  const activeOrders = await db
-    .select({
-      tableId: orders.tableId,
-      orderId: orders.id,
-      orderNumber: orders.orderNumber,
-      status: orders.status,
-      kdsStage: orders.kdsStage,
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.sessionId, sessionId),
-        eq(orders.fulfillmentType, "dine_in"),
-        ne(orders.status, "cancelled"),
-        sql`${orders.tableId} is not null`,
-        sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
-      ),
-    );
+  await expireStaleReservations();
 
-  return new Map(
-    activeOrders.filter((order) => order.tableId).map((order) => [
-      order.tableId!,
-      {
-        orderId: order.orderId,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        kdsStage: order.kdsStage,
-      },
-    ]),
-  );
+  const activeOrders = await db.query.orders.findMany({
+    where: and(
+      eq(orders.sessionId, sessionId),
+      eq(orders.fulfillmentType, "dine_in"),
+      ne(orders.status, "cancelled"),
+      sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
+    ),
+    with: {
+      table: { with: { floor: true } },
+      orderTables: { with: { table: { with: { floor: true } } } },
+    },
+  });
+
+  const map = new Map<string, TableOccupancy>();
+
+  for (const order of activeOrders) {
+    const linkedTables =
+      order.orderTables.length > 0
+        ? order.orderTables
+            .slice()
+            .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+            .map((row) => row.table)
+            .filter((table): table is NonNullable<typeof table> => Boolean(table))
+        : order.table
+          ? [order.table]
+          : [];
+    const primaryTableId =
+      order.orderTables.find((row) => row.isPrimary)?.tableId ??
+      order.tableId ??
+      linkedTables[0]?.id;
+    if (!primaryTableId || linkedTables.length === 0) continue;
+    const occupancy: TableOccupancy = {
+      kind: "order",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      kdsStage: order.kdsStage,
+      label: formatMergedTableLabel(linkedTables),
+      tableIds: linkedTables.map((table) => table.id),
+      primaryTableId,
+    };
+    for (const table of linkedTables) map.set(table.id, occupancy);
+  }
+
+  const activeReservations = await db.query.reservations.findMany({
+    where: and(
+      eq(reservations.status, "booked"),
+      sql`${reservations.startAt} <= now()`,
+      sql`${reservations.startAt} + (${reservations.durationMinutes} * interval '1 minute') > now()`,
+    ),
+    with: {
+      reservationTables: { with: { table: { with: { floor: true } } } },
+    },
+  });
+
+  for (const reservation of activeReservations) {
+    const linkedTables = reservation.reservationTables
+      .slice()
+      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+      .map((row) => row.table)
+      .filter((table): table is NonNullable<typeof table> => Boolean(table));
+    const primaryTableId =
+      reservation.reservationTables.find((row) => row.isPrimary)?.tableId ??
+      linkedTables[0]?.id;
+    if (!primaryTableId || linkedTables.length === 0) continue;
+    const occupancy: TableOccupancy = {
+      kind: "reservation",
+      reservationId: reservation.id,
+      customerName: reservation.customerName,
+      status: reservation.status,
+      label: `${formatMergedTableLabel(linkedTables)} reserved`,
+      tableIds: linkedTables.map((table) => table.id),
+      primaryTableId,
+      startAt: reservation.startAt.toISOString(),
+      durationMinutes: reservation.durationMinutes,
+    };
+    for (const table of linkedTables) {
+      if (!map.has(table.id)) map.set(table.id, occupancy);
+    }
+  }
+
+  return map;
 }
 
 export async function getOccupiedTableIds(sessionId: string) {
@@ -115,12 +197,41 @@ export async function getTableById(tableId: string) {
   });
 }
 
+export async function getReservationForCart(reservationId: string) {
+  await expireStaleReservations();
+  return db.query.reservations.findFirst({
+    where: eq(reservations.id, reservationId),
+    with: {
+      reservationTables: { with: { table: { with: { floor: true } } } },
+    },
+  });
+}
+
+export async function getPosTableMap() {
+  const rows = await db
+    .select({
+      id: tables.id,
+      number: tables.number,
+      floorName: floors.name,
+    })
+    .from(tables)
+    .innerJoin(floors, eq(tables.floorId, floors.id));
+
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.id,
+      { number: row.number, floorName: row.floorName },
+    ]),
+  );
+}
+
 export async function getSessionOrders(sessionId: string) {
   return db.query.orders.findMany({
     where: eq(orders.sessionId, sessionId),
     with: {
       customer: true,
       table: true,
+      orderTables: { with: { table: { with: { floor: true } } } },
     },
     orderBy: [desc(orders.createdAt)],
   });
@@ -132,6 +243,7 @@ export async function getOrderDetail(orderId: string) {
     with: {
       customer: true,
       table: { with: { floor: true } },
+      orderTables: { with: { table: { with: { floor: true } } } },
       items: true,
       coupon: true,
       payments: true,
@@ -165,6 +277,7 @@ export async function getOrderForReceipt(orderId: string) {
       customer: true,
       employee: true,
       table: { with: { floor: true } },
+      orderTables: { with: { table: { with: { floor: true } } } },
       items: true,
       coupon: true,
       payments: {
@@ -188,6 +301,7 @@ export async function getKitchenTickets() {
     ),
     with: {
       table: { with: { floor: true } },
+      orderTables: { with: { table: { with: { floor: true } } } },
       items: {
         where: eq(orderItems.isKitchenItem, true),
         with: {

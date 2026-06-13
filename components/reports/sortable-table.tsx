@@ -95,14 +95,15 @@ export function SortableDataTable<T>({
 
   if (rows.length === 0) {
     return (
-      <div className="text-muted-foreground flex min-h-24 items-center justify-center rounded-lg border border-dashed text-sm">
+      <div className="text-muted-foreground flex min-h-24 items-center justify-center rounded-lg border border-dashed px-4 py-8 text-sm">
         {emptyMessage}
       </div>
     );
   }
 
   return (
-    <Table>
+    <div className="overflow-hidden rounded-xl border">
+      <Table>
       <TableHeader>
         <TableRow>
           {columns.map((column) => (
@@ -149,5 +150,6 @@ export function SortableDataTable<T>({
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 }

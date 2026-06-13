@@ -1,19 +1,23 @@
+import Image from "next/image";
+
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Cafe POS</h1>
-          <p className="text-sm text-muted-foreground">
-            Restaurant Point-of-Sale
-          </p>
-        </div>
-        {children}
+    <div className="bg-cream flex min-h-screen flex-col items-center justify-center p-4">
+      <div className="mb-6 flex justify-center">
+        <Image
+          src="/logo.png"
+          alt="Chai Biskit Cafe"
+          width={166}
+          height={136}
+          priority
+          className="h-28 w-auto object-contain"
+        />
       </div>
+      <div className="w-full max-w-md">{children}</div>
     </div>
   );
 }

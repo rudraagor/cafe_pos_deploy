@@ -1,6 +1,7 @@
 import {
   BarChart3,
   CalendarClock,
+  ClipboardList,
   CupSoda,
   LayoutGrid,
   ShoppingBag,
@@ -12,12 +13,43 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import type { Role } from "@/lib/auth";
 
 export type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** POS links that need an open register session before use. */
+  requiresSession?: boolean;
 };
+
+/** POS terminal sections (formerly the top header nav). */
+export const posNav: NavItem[] = [
+  { label: "POS Orders", href: "/pos", icon: CupSoda },
+  {
+    label: "Takeaway",
+    href: "/pos/takeaway",
+    icon: ShoppingBag,
+    requiresSession: true,
+  },
+  {
+    label: "Orders",
+    href: "/pos/orders",
+    icon: ClipboardList,
+    requiresSession: true,
+  },
+  {
+    label: "Customer",
+    href: "/pos/customers",
+    icon: Users,
+  },
+  {
+    label: "Table View",
+    href: "/pos/tables",
+    icon: LayoutGrid,
+    requiresSession: true,
+  },
+];
 
 export const adminNav: NavItem[] = [
   { label: "Products", href: "/admin/products", icon: Package },
@@ -30,10 +62,9 @@ export const adminNav: NavItem[] = [
   { label: "Reports", href: "/admin/reports", icon: BarChart3 },
 ];
 
-export const posNav: NavItem[] = [
-  { label: "POS Order", href: "/pos", icon: CupSoda },
-  { label: "Takeaway", href: "/pos/takeaway", icon: ShoppingBag },
-  { label: "Orders", href: "/pos/orders", icon: LayoutGrid },
-  { label: "Customer", href: "/pos/customers", icon: Users },
-  { label: "Table View", href: "/pos/tables", icon: LayoutGrid },
-];
+export function getSidebarNav(role: Role): NavItem[] {
+  if (role === "admin") {
+    return [...posNav, ...adminNav];
+  }
+  return posNav;
+}

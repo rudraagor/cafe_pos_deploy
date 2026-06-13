@@ -6,6 +6,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -38,6 +39,12 @@ export const unitOfMeasure = pgEnum("unit_of_measure", [
   "litre",
 ]);
 export const sessionStatus = pgEnum("session_status", ["open", "closed"]);
+export const reservationStatus = pgEnum("reservation_status", [
+  "booked",
+  "seated",
+  "expired",
+  "cancelled",
+]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -82,6 +89,7 @@ export const products = pgTable("products", {
   description: text("description"),
   supportedModifiers: jsonb("supported_modifiers").notNull().default([]),
   isKitchenItem: boolean("is_kitchen_item").notNull().default(true),
+  isOutOfStock: boolean("is_out_of_stock").notNull().default(false),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   ...timestamps,
 });
@@ -214,6 +222,55 @@ export const orders = pgTable("orders", {
     .defaultNow(),
 });
 
+export const orderTables = pgTable(
+  "order_tables",
+  {
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    tableId: uuid("table_id")
+      .notNull()
+      .references(() => tables.id, { onDelete: "cascade" }),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    ...timestamps,
+  },
+  (table) => [primaryKey({ columns: [table.orderId, table.tableId] })],
+);
+
+export const reservations = pgTable("reservations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  customerPhone: text("customer_phone"),
+  partySize: integer("party_size").notNull().default(2),
+  startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+  durationMinutes: integer("duration_minutes").notNull().default(90),
+  status: reservationStatus("status").notNull().default("booked"),
+  linkedOrderId: uuid("linked_order_id").references(() => orders.id, {
+    onDelete: "set null",
+  }),
+  createdBy: uuid("created_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  notes: text("notes"),
+  ...timestamps,
+});
+
+export const reservationTables = pgTable(
+  "reservation_tables",
+  {
+    reservationId: uuid("reservation_id")
+      .notNull()
+      .references(() => reservations.id, { onDelete: "cascade" }),
+    tableId: uuid("table_id")
+      .notNull()
+      .references(() => tables.id, { onDelete: "cascade" }),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    ...timestamps,
+  },
+  (table) => [primaryKey({ columns: [table.reservationId, table.tableId] })],
+);
+
 export const orderItems = pgTable("order_items", {
   id: uuid("id").primaryKey().defaultRandom(),
   orderId: uuid("order_id")
@@ -281,11 +338,13 @@ export const floorsRelations = relations(floors, ({ many }) => ({
   tables: many(tables),
 }));
 
-export const tablesRelations = relations(tables, ({ one }) => ({
+export const tablesRelations = relations(tables, ({ one, many }) => ({
   floor: one(floors, {
     fields: [tables.floorId],
     references: [floors.id],
   }),
+  orderTables: many(orderTables),
+  reservationTables: many(reservationTables),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -311,7 +370,46 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   items: many(orderItems),
   payments: many(payments),
+  orderTables: many(orderTables),
+  reservations: many(reservations),
 }));
+
+export const orderTablesRelations = relations(orderTables, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderTables.orderId],
+    references: [orders.id],
+  }),
+  table: one(tables, {
+    fields: [orderTables.tableId],
+    references: [tables.id],
+  }),
+}));
+
+export const reservationsRelations = relations(reservations, ({ one, many }) => ({
+  linkedOrder: one(orders, {
+    fields: [reservations.linkedOrderId],
+    references: [orders.id],
+  }),
+  createdByUser: one(users, {
+    fields: [reservations.createdBy],
+    references: [users.id],
+  }),
+  reservationTables: many(reservationTables),
+}));
+
+export const reservationTablesRelations = relations(
+  reservationTables,
+  ({ one }) => ({
+    reservation: one(reservations, {
+      fields: [reservationTables.reservationId],
+      references: [reservations.id],
+    }),
+    table: one(tables, {
+      fields: [reservationTables.tableId],
+      references: [tables.id],
+    }),
+  }),
+);
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   order: one(orders, {

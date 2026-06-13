@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { searchMarketingCustomers } from "@/app/(admin)/admin/reports/marketing-actions";
+import { searchMarketingCustomers } from "@/app/(dashboard)/admin/reports/marketing-actions";
 import {
   CustomerNameButton,
   CustomerProfileDialog,
@@ -13,6 +14,7 @@ import {
   SortableColumn,
   SortableDataTable,
 } from "@/components/reports/sortable-table";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/lib/pos/pricing";
@@ -229,11 +231,45 @@ type MarketingCustomer = {
   lastOrderAt: string | null;
 };
 
+const MARKETING_PAGE_SIZE = 10;
+
+function sortMarketingRows(
+  rows: MarketingCustomer[],
+  columns: SortableColumn<MarketingCustomer>[],
+  sortKey: string | null,
+  sortDirection: "asc" | "desc",
+) {
+  if (!sortKey) return rows;
+  const column = columns.find((entry) => entry.key === sortKey);
+  if (!column?.sortValue) return rows;
+
+  const copy = [...rows];
+  copy.sort((a, b) => {
+    const left = column.sortValue!(a);
+    const right = column.sortValue!(b);
+    if (left == null && right == null) return 0;
+    if (left == null) return 1;
+    if (right == null) return -1;
+    if (left instanceof Date && right instanceof Date) {
+      return left.getTime() - right.getTime();
+    }
+    if (typeof left === "number" && typeof right === "number") {
+      return left - right;
+    }
+    return String(left).localeCompare(String(right));
+  });
+  if (sortDirection === "desc") copy.reverse();
+  return copy;
+}
+
 export function MarketingWidget({ params }: { params: ReportSearchParams }) {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<MarketingCustomer[]>([]);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<string | null>("spend");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const paramsKey = useMemo(() => JSON.stringify(params), [params]);
 
   async function search(nextQuery = query) {
@@ -245,6 +281,7 @@ export function MarketingWidget({ params }: { params: ReportSearchParams }) {
       );
       if (result.ok) {
         setRows(result.rows);
+        setPage(1);
         if (result.rows.length === 0) {
           toast.message("No customers matched your search.");
         }
@@ -271,6 +308,7 @@ export function MarketingWidget({ params }: { params: ReportSearchParams }) {
         if (cancelled) return;
         if (result.ok) {
           setRows(result.rows);
+          setPage(1);
         } else {
           toast.error(result.error);
         }
@@ -335,6 +373,21 @@ export function MarketingWidget({ params }: { params: ReportSearchParams }) {
     [],
   );
 
+  const sortedRows = useMemo(
+    () => sortMarketingRows(rows, columns, sortKey, sortDirection),
+    [rows, columns, sortKey, sortDirection],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / MARKETING_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const pageRows = sortedRows.slice(
+    (currentPage - 1) * MARKETING_PAGE_SIZE,
+    currentPage * MARKETING_PAGE_SIZE,
+  );
+  const rangeStart =
+    sortedRows.length === 0 ? 0 : (currentPage - 1) * MARKETING_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * MARKETING_PAGE_SIZE, sortedRows.length);
+
   return (
     <>
       <Card>
@@ -363,7 +416,7 @@ export function MarketingWidget({ params }: { params: ReportSearchParams }) {
             </button>
           </form>
           <SortableDataTable
-            rows={rows}
+            rows={pageRows}
             columns={columns}
             rowKey={(row) => row.id}
             emptyMessage={
@@ -371,7 +424,48 @@ export function MarketingWidget({ params }: { params: ReportSearchParams }) {
                 ? "Loading customers…"
                 : "No customers found for this search and filter range."
             }
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSortChange={(key, direction) => {
+              setSortKey(key);
+              setSortDirection(direction);
+              setPage(1);
+            }}
           />
+          {sortedRows.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <p className="text-muted-foreground">
+                Showing {rangeStart}–{rangeEnd} of {sortedRows.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                  Previous
+                </Button>
+                <span className="text-muted-foreground tabular-nums">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() =>
+                    setPage((value) => Math.min(totalPages, value + 1))
+                  }
+                >
+                  Next
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
       <CustomerProfileDialog
@@ -397,6 +491,7 @@ export function LiveFloorWidget({
     total: number;
     tableNumber: number;
     floorName: string;
+    tableLabel: string;
     customerId: string | null;
     customerName: string;
   }[];
@@ -410,8 +505,8 @@ export function LiveFloorWidget({
       key: "table",
       label: "Table",
       sortable: true,
-      sortValue: (row) => row.tableNumber,
-      render: (row) => `${row.floorName} · T${row.tableNumber}`,
+      sortValue: (row) => row.tableLabel,
+      render: (row) => row.tableLabel,
     },
     {
       key: "customer",

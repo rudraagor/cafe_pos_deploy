@@ -5,9 +5,13 @@ import {
   createCustomer,
   deleteCustomer,
   updateCustomer,
-} from "@/app/(pos)/pos/actions";
+} from "@/app/(dashboard)/pos/actions";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { DataTableShell } from "@/components/admin/data-table-shell";
+import {
+  paginateRows,
+  TablePagination,
+} from "@/components/admin/table-pagination";
 import { PageHeader } from "@/components/admin/page-header";
 import { CustomerFormDialog } from "@/components/pos/customer-form-dialog";
 import {
@@ -18,6 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+const PAGE_SIZE = 10;
 
 export type CustomerRow = {
   id: string;
@@ -32,6 +38,8 @@ export function CustomersManagement({
   customers: CustomerRow[];
 }) {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return customers;
@@ -43,20 +51,35 @@ export function CustomersManagement({
     );
   }, [customers, search]);
 
+  const { pageRows, currentPage } = paginateRows(filtered, page, PAGE_SIZE);
+
   return (
     <div className="space-y-6 p-6">
       <PageHeader
         title="Customers"
         description="Manage cafe customers for order assignment and receipts."
-        action={<CustomerFormDialog mode="create" action={createCustomer} />}
       />
       <DataTableShell
         searchValue={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
         searchPlaceholder="Search customers..."
+        toolbarActions={
+          <CustomerFormDialog mode="create" action={createCustomer} />
+        }
         empty={filtered.length === 0}
         emptyTitle="No customers yet"
         emptyDescription="Add a customer to assign them to orders."
+        footer={
+          <TablePagination
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPage}
+          />
+        }
       >
         <Table>
           <TableHeader>
@@ -64,11 +87,11 @@ export function CustomersManagement({
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
-              <TableHead className="w-24" />
+              <TableHead className="w-28 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((customer) => (
+            {pageRows.map((customer) => (
               <TableRow key={customer.id}>
                 <TableCell className="font-medium">{customer.name}</TableCell>
                 <TableCell>{customer.email ?? "—"}</TableCell>

@@ -17,13 +17,20 @@ export const sendToKitchenSchema = z
   .object({
     fulfillmentType: z.enum(["dine_in", "takeaway"]).default("dine_in"),
     tableId: z.string().uuid().nullable().optional(),
+    tableIds: z.array(z.string().uuid()).optional(),
+    reservationId: z.string().uuid().optional(),
     orderId: z.string().uuid().optional(),
     items: z.array(cartItemSchema).min(1, "Add at least one product."),
     couponCode: z.string().trim().optional(),
     customerId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.fulfillmentType === "dine_in" && !value.tableId) {
+    const selectedTableIds = value.tableIds?.length
+      ? value.tableIds
+      : value.tableId
+        ? [value.tableId]
+        : [];
+    if (value.fulfillmentType === "dine_in" && selectedTableIds.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tableId"],

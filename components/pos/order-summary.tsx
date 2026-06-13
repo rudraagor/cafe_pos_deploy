@@ -4,7 +4,7 @@ import { Loader2, Send, Tag, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { sendToKitchen } from "@/app/(pos)/pos/actions";
+import { sendToKitchen } from "@/app/(dashboard)/pos/actions";
 import { CustomerAssignPopup } from "@/components/pos/customer-assign-popup";
 import { DiscountPopup } from "@/components/pos/discount-popup";
 import { useCartPricing } from "@/components/pos/cart-panel";
@@ -17,6 +17,8 @@ type CustomerOption = { id: string; name: string; email: string | null };
 type OrderSummaryProps = {
   tableId: string;
   orderTableId: string | null;
+  orderTableIds?: string[];
+  reservationId?: string | null;
   fulfillmentType: "dine_in" | "takeaway";
   promotions: PromotionInput[];
   customers: CustomerOption[];
@@ -25,6 +27,8 @@ type OrderSummaryProps = {
 export function OrderSummary({
   tableId,
   orderTableId,
+  orderTableIds = [],
+  reservationId,
   fulfillmentType,
   promotions,
   customers,
@@ -47,6 +51,8 @@ export function OrderSummary({
     startTransition(async () => {
       const result = await sendToKitchen({
         tableId: orderTableId,
+        tableIds: orderTableIds,
+        reservationId: reservationId ?? undefined,
         fulfillmentType,
         orderId: cart.orderId,
         items: cart.items,

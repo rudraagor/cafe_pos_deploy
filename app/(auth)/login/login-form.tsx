@@ -18,7 +18,12 @@ import { Label } from "@/components/ui/label";
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
+    <Button
+      type="submit"
+      size="lg"
+      className="h-11 w-full text-sm"
+      disabled={pending}
+    >
       {pending ? "Signing in..." : "Sign in"}
     </Button>
   );
@@ -28,9 +33,11 @@ export function LoginForm() {
   const [state, formAction] = useActionState(authenticate, undefined);
 
   return (
-    <Card>
+    <Card className="[--card-spacing:--spacing(6)]">
       <CardHeader>
-        <CardTitle>Log in</CardTitle>
+        <CardTitle className="text-2xl font-semibold tracking-tight">
+          Log in
+        </CardTitle>
         <CardDescription>
           Enter your credentials to open the POS session.
         </CardDescription>

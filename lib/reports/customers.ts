@@ -2,12 +2,11 @@ import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   customers,
-  floors,
   orderItems,
   orders,
   posSessions,
-  tables,
 } from "@/lib/db/schema";
+import { formatMergedTableLabel } from "@/lib/pos/table-labels";
 import type { ReportFilters, ReportRange } from "./range";
 
 function paidOrdersWhere(filters: ReportRange | ReportFilters) {
@@ -155,47 +154,50 @@ export async function getAdminLiveFloor() {
     return { sessionOpen: false as const, floors: [] as LiveFloorEntry[] };
   }
 
-  const activeOrders = await db
-    .select({
-      orderId: orders.id,
-      orderNumber: orders.orderNumber,
-      status: orders.status,
-      kdsStage: orders.kdsStage,
-      total: orders.total,
-      tableId: orders.tableId,
-      tableNumber: tables.number,
-      floorName: floors.name,
-      customerId: customers.id,
-      customerName: customers.name,
-    })
-    .from(orders)
-    .innerJoin(tables, eq(orders.tableId, tables.id))
-    .innerJoin(floors, eq(tables.floorId, floors.id))
-    .leftJoin(customers, eq(orders.customerId, customers.id))
-    .where(
-      and(
-        eq(orders.sessionId, openSession.id),
-        eq(orders.fulfillmentType, "dine_in"),
-        sql`${orders.status} <> 'cancelled'`,
-        sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
-      ),
-    )
-    .orderBy(floors.name, tables.number);
+  const activeOrders = await db.query.orders.findMany({
+    where: and(
+      eq(orders.sessionId, openSession.id),
+      eq(orders.fulfillmentType, "dine_in"),
+      sql`${orders.status} <> 'cancelled'`,
+      sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
+    ),
+    with: {
+      customer: true,
+      table: { with: { floor: true } },
+      orderTables: { with: { table: { with: { floor: true } } } },
+    },
+    orderBy: [desc(orders.createdAt)],
+  });
 
   return {
     sessionOpen: true as const,
     sessionId: openSession.id,
-    floors: activeOrders.map((row) => ({
-      orderId: row.orderId,
-      orderNumber: row.orderNumber,
-      status: row.status,
-      kdsStage: row.kdsStage,
-      total: Number(row.total),
-      tableNumber: row.tableNumber,
-      floorName: row.floorName,
-      customerId: row.customerId,
-      customerName: row.customerName ?? "Walk-in",
-    })),
+    floors: activeOrders.map((row) => {
+      const linkedTables =
+        row.orderTables.length > 0
+          ? row.orderTables
+              .slice()
+              .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+              .map((link) => link.table)
+          : row.table
+            ? [row.table]
+            : [];
+      const primary = linkedTables[0];
+      return {
+        orderId: row.id,
+        orderNumber: row.orderNumber,
+        status: row.status,
+        kdsStage: row.kdsStage,
+        total: Number(row.total),
+        tableNumber: primary?.number ?? 0,
+        floorName: primary?.floor?.name ?? "Floor",
+        tableLabel: linkedTables.length
+          ? formatMergedTableLabel(linkedTables)
+          : "—",
+        customerId: row.customerId,
+        customerName: row.customer?.name ?? "Walk-in",
+      };
+    }),
   };
 }
 
@@ -207,6 +209,7 @@ export type LiveFloorEntry = {
   total: number;
   tableNumber: number;
   floorName: string;
+  tableLabel: string;
   customerId: string | null;
   customerName: string;
 };

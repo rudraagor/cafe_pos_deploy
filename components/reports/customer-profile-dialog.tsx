@@ -2,7 +2,7 @@
 
 import { Loader2, Mail, Tag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { fetchCustomerProfile } from "@/app/(admin)/admin/reports/marketing-actions";
+import { fetchCustomerProfile } from "@/app/(dashboard)/admin/reports/marketing-actions";
 import { SendCouponDialog } from "@/components/reports/send-coupon-dialog";
 import { Button } from "@/components/ui/button";
 import {

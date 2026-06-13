@@ -21,7 +21,8 @@ export default auth((req) => {
   const isAuthRoute = path === "/login";
   if (isAuthRoute) {
     if (isLoggedIn) {
-      return Response.redirect(new URL("/pos", nextUrl));
+      const home = role === "admin" ? "/admin" : "/pos";
+      return Response.redirect(new URL(home, nextUrl));
     }
     return;
   }

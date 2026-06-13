@@ -3,6 +3,7 @@ import { KdsBoard } from "@/components/kds/kds-board";
 import { KdsPinGate } from "@/components/kds/kds-pin-gate";
 import { KDS_UNLOCK_COOKIE } from "@/lib/kds/access";
 import { getKitchenTickets } from "@/lib/pos/queries";
+import { formatMergedTableLabel } from "@/lib/pos/table-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +21,19 @@ export default async function KdsPage() {
         orderNumber: ticket.orderNumber,
         stage: ticket.kdsStage,
         status: ticket.status,
-        tableLabel: ticket.fulfillmentType === "takeaway"
-          ? "Takeaway"
-          : ticket.table
-          ? `${ticket.table.floor?.name ?? "Floor"} / T${ticket.table.number}`
-          : "Takeaway",
+        tableLabel:
+          ticket.fulfillmentType === "takeaway"
+            ? "Takeaway"
+            : ticket.orderTables.length > 0
+              ? formatMergedTableLabel(
+                  ticket.orderTables
+                    .slice()
+                    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+                    .map((row) => row.table),
+                )
+              : ticket.table
+                ? `${ticket.table.floor?.name ?? "Floor"} / T${ticket.table.number}`
+                : "Takeaway",
         sentToKitchenAt: (
           ticket.sentToKitchenAt ?? ticket.createdAt
         ).toISOString(),

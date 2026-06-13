@@ -17,7 +17,9 @@ export async function authenticate(
     await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
-      redirectTo: "/pos",
+      // Land on the role-aware home route, which sends admins to the
+      // dashboard (/admin) and employees to the POS terminal (/pos).
+      redirectTo: "/",
     });
   } catch (error) {
     if (error instanceof AuthError) {

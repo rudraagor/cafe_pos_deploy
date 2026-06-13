@@ -4,7 +4,7 @@ import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { validateCoupon } from "@/app/(pos)/pos/actions";
+import { validateCoupon } from "@/app/(dashboard)/pos/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

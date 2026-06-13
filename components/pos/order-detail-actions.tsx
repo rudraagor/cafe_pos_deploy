@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { deleteDraftOrder, resendReceipt } from "@/app/(pos)/pos/actions";
+import { deleteDraftOrder, resendReceipt } from "@/app/(dashboard)/pos/actions";
 import {
   PaymentDialog,
   type EnabledPaymentMethod,
@@ -37,6 +37,7 @@ type OrderItemRow = {
 type EditDraftPayload = {
   orderId: string;
   tableId: string | null;
+  tableIds?: string[];
   fulfillmentType: "dine_in" | "takeaway";
   items: {
     productId: string;
@@ -109,7 +110,7 @@ export function OrderDetailActions({
     router.push(
       editPayload.fulfillmentType === "takeaway"
         ? "/pos/takeaway"
-        : `/pos?table=${editPayload.tableId}&edit=${editPayload.orderId}`,
+        : `/pos?table=${editPayload.tableId}&tables=${(editPayload.tableIds?.length ? editPayload.tableIds : editPayload.tableId ? [editPayload.tableId] : []).join(",")}&edit=${editPayload.orderId}`,
     );
   }
 
