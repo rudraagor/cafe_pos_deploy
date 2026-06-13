@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Send, Tag, User } from "lucide-react";
+import { CreditCard, Loader2, Send, Tag, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -34,7 +34,7 @@ export function OrderSummary({
 
   const computed = useCartPricing(tableId, promotions);
 
-  function handleSend() {
+  function handleSend(payAfter = false) {
     if (cart.items.length === 0) {
       toast.error("Add products before sending to kitchen.");
       return;
@@ -52,7 +52,11 @@ export function OrderSummary({
       if (result.ok) {
         toast.success(result.message ?? "Sent to kitchen.");
         clearTable(tableId);
-        router.push("/pos/orders");
+        router.push(
+          payAfter && result.orderId
+            ? `/pos/orders/${result.orderId}?pay=1`
+            : "/pos/orders",
+        );
         router.refresh();
       } else {
         toast.error(result.error);
@@ -136,7 +140,7 @@ export function OrderSummary({
         <Button
           type="button"
           className="w-full"
-          onClick={handleSend}
+          onClick={() => handleSend(false)}
           disabled={isPending || cart.items.length === 0}
         >
           {isPending ? (
@@ -146,15 +150,20 @@ export function OrderSummary({
           )}
           Send to Kitchen
         </Button>
-      </div>
-
-      <div className="border-t p-4">
-        <h3 className="text-muted-foreground mb-2 text-xs font-semibold uppercase">
-          Payment
-        </h3>
-        <p className="text-muted-foreground text-sm">
-          Payments (cash, UPI QR, card) coming in the next milestone.
-        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => handleSend(true)}
+          disabled={isPending || cart.items.length === 0}
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <CreditCard className="size-4" />
+          )}
+          Send & Pay
+        </Button>
       </div>
 
       <DiscountPopup

@@ -19,6 +19,9 @@ export default function KdsLayout({
             <span className="size-2.5 rounded-full bg-amber-500" /> Preparing
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded-full bg-sky-500" /> Completed
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded-full bg-red-500" /> Overdue
           </span>
         </div>

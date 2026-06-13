@@ -1,10 +1,15 @@
 "use client";
 
-import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { CreditCard, Loader2, Mail, Pencil, Printer, ReceiptText, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { deleteDraftOrder } from "@/app/(pos)/pos/actions";
+import { deleteDraftOrder, resendReceipt } from "@/app/(pos)/pos/actions";
+import {
+  PaymentDialog,
+  type EnabledPaymentMethod,
+} from "@/components/pos/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/lib/pos/cart-store";
@@ -39,20 +44,34 @@ type EditDraftPayload = {
 
 type OrderDetailActionsProps = {
   orderId: string;
+  orderNumber: string;
+  total: number;
+  tableId: string | null;
   status: "draft" | "paid" | "cancelled";
   editPayload?: EditDraftPayload;
+  paymentMethods: EnabledPaymentMethod[];
+  upiQrDataUrl?: string | null;
+  upiPaymentUrl?: string | null;
+  defaultPayOpen?: boolean;
+  customerEmail?: string | null;
 };
 
 export function OrderDetailActions({
   orderId,
+  orderNumber,
+  total,
+  tableId,
   status,
   editPayload,
+  paymentMethods,
+  upiQrDataUrl,
+  upiPaymentUrl,
+  defaultPayOpen = false,
+  customerEmail,
 }: OrderDetailActionsProps) {
   const router = useRouter();
   const loadDraft = useCartStore((s) => s.loadDraft);
   const [isPending, startTransition] = useTransition();
-
-  if (status !== "draft") return null;
 
   function handleEdit() {
     if (!editPayload) return;
@@ -83,8 +102,66 @@ export function OrderDetailActions({
     });
   }
 
+  function handleResend() {
+    startTransition(async () => {
+      const result = await resendReceipt(orderId);
+      if (result.ok) {
+        toast.success(result.message ?? "Receipt resent.");
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
+  if (status === "paid") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => window.open(`/receipt/${orderId}?print=1`, "_blank")}
+        >
+          <Printer className="size-4" />
+          Print receipt
+        </Button>
+        <Button type="button" variant="outline" render={<Link href={`/receipt/${orderId}`} />}>
+          <ReceiptText className="size-4" />
+          View receipt
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleResend}
+          disabled={isPending || !customerEmail}
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Mail className="size-4" />
+          )}
+          Resend receipt
+        </Button>
+      </div>
+    );
+  }
+
+  if (status !== "draft") return null;
+
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
+      <PaymentDialog
+        order={{ id: orderId, orderNumber, total, tableId }}
+        methods={paymentMethods}
+        upiQrDataUrl={upiQrDataUrl}
+        upiPaymentUrl={upiPaymentUrl}
+        defaultOpen={defaultPayOpen}
+        trigger={
+          <Button type="button">
+            <CreditCard className="size-4" />
+            Pay
+          </Button>
+        }
+      />
       <Button type="button" variant="outline" onClick={handleEdit}>
         <Pencil className="size-4" />
         Edit Order

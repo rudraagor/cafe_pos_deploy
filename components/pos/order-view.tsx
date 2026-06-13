@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { FloorPopup } from "@/components/pos/floor-popup";
 import { OrderSummary } from "@/components/pos/order-summary";
@@ -33,12 +33,8 @@ export function OrderView({
   floors,
   occupiedTableIds,
 }: OrderViewProps) {
-  const [floorOpen, setFloorOpen] = useState(!tableId);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    setFloorOpen(!tableId);
-  }, [tableId]);
+  const [floorOpen, setFloorOpen] = useState(false);
+  const searchQuery = "";
 
   if (!tableId) {
     return (
@@ -47,7 +43,7 @@ export function OrderView({
           Select a table to start an order.
         </div>
         <FloorPopup
-          open={floorOpen}
+          open
           onOpenChange={setFloorOpen}
           floors={floors}
           occupiedTableIds={occupiedTableIds}

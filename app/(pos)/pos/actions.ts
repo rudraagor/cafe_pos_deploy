@@ -9,8 +9,11 @@ import {
   customers,
   orders,
   orderItems,
+  paymentMethods,
+  payments,
   posSessions,
 } from "@/lib/db/schema";
+import { sendReceiptEmail } from "@/lib/email/send-receipt";
 import { computeOrder } from "@/lib/pos/pricing";
 import {
   findCouponByCode,
@@ -23,8 +26,11 @@ import {
   getOpenSessionForUser,
   getSessionClosingAmount,
 } from "@/lib/pos/session";
+import { getAppUrl } from "@/lib/receipt-brand";
+import { publishKdsChanged } from "@/lib/realtime/publish";
 import { customerSchema } from "@/lib/validations/customers";
 import { sendToKitchenSchema } from "@/lib/validations/order";
+import { paymentSchema } from "@/lib/validations/payment";
 
 export type SessionInfo = {
   openSession: Awaited<ReturnType<typeof getOpenSessionForUser>>;
@@ -163,7 +169,7 @@ export async function sendToKitchen(
   const pricingItems = items.map((item) => {
     const product = productMap.get(item.productId);
     if (!product) {
-      throw new Error(`Product ${item.productId} not found.`);
+      return null;
     }
     return {
       productId: item.productId,
@@ -174,6 +180,13 @@ export async function sendToKitchen(
       isKitchenItem: product.isKitchenItem,
     };
   });
+  const hasMissingProduct = pricingItems.some((item) => item === null);
+  if (hasMissingProduct) {
+    return { ok: false, error: "One of the selected products no longer exists." };
+  }
+  const validPricingItems = pricingItems.filter(
+    (item): item is NonNullable<(typeof pricingItems)[number]> => item !== null,
+  );
 
   const promotions = await getActivePromotions();
   let coupon = null;
@@ -190,7 +203,7 @@ export async function sendToKitchen(
     };
   }
 
-  const computed = computeOrder(pricingItems, { promotions, coupon });
+  const computed = computeOrder(validPricingItems, { promotions, coupon });
 
   const orderValues = {
     sessionId: session.id,
@@ -199,7 +212,6 @@ export async function sendToKitchen(
     employeeId: user.id,
     couponId: coupon?.id ?? null,
     status: "draft" as const,
-    kdsStage: "to_cook" as const,
     subtotal: computed.subtotal.toFixed(2),
     tax: computed.tax.toFixed(2),
     discountTotal: computed.discountTotal.toFixed(2),
@@ -208,29 +220,7 @@ export async function sendToKitchen(
     updatedAt: new Date(),
   };
 
-  let savedOrderId: string;
-
-  if (orderId) {
-    const existing = await db.query.orders.findFirst({
-      where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
-    });
-    if (!existing) {
-      return { ok: false, error: "Draft order not found." };
-    }
-
-    await db.delete(orderItems).where(eq(orderItems.orderId, orderId));
-    await db.update(orders).set(orderValues).where(eq(orders.id, orderId));
-    savedOrderId = orderId;
-  } else {
-    const orderNumber = await generateOrderNumber(session.id);
-    const [created] = await db
-      .insert(orders)
-      .values({ ...orderValues, orderNumber })
-      .returning({ id: orders.id });
-    savedOrderId = created.id;
-  }
-
-  await db.insert(orderItems).values(
+  const itemValues = (savedOrderId: string) =>
     computed.lines.map((line) => ({
       orderId: savedOrderId,
       productId: line.productId,
@@ -241,18 +231,82 @@ export async function sendToKitchen(
       lineDiscount: line.lineDiscount.toFixed(2),
       lineTotal: line.lineTotal.toFixed(2),
       isKitchenItem: line.isKitchenItem,
-    })),
-  );
+    }));
+
+  let savedOrderId: string | null = null;
+  let lastCreateError: unknown = null;
+  const attempts = orderId ? 1 : 3;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      savedOrderId = await db.transaction(async (tx) => {
+        if (orderId) {
+          const existing = await tx.query.orders.findFirst({
+            where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
+          });
+          if (!existing) {
+            return null;
+          }
+
+          await tx.delete(orderItems).where(eq(orderItems.orderId, orderId));
+          await tx
+            .update(orders)
+            .set({
+              ...orderValues,
+              kdsStage: existing.kdsStage,
+            })
+            .where(eq(orders.id, orderId));
+          await tx.insert(orderItems).values(itemValues(orderId));
+          return orderId;
+        }
+
+        const orderNumber = await generateOrderNumber(session.id, tx);
+        const [created] = await tx
+          .insert(orders)
+          .values({ ...orderValues, kdsStage: "to_cook", orderNumber })
+          .returning({ id: orders.id });
+        await tx.insert(orderItems).values(itemValues(created.id));
+        return created.id;
+      });
+      break;
+    } catch (error) {
+      lastCreateError = error;
+      if (orderId || !isUniqueViolation(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (!savedOrderId) {
+    if (lastCreateError && !orderId) {
+      return {
+        ok: false,
+        error: "Could not generate a unique order number. Please try again.",
+      };
+    }
+    return { ok: false, error: "Draft order not found." };
+  }
 
   revalidatePath("/pos");
   revalidatePath("/pos/orders");
   revalidatePath("/pos/tables");
+  revalidatePath("/kds");
+  publishKdsChanged({ orderId: savedOrderId });
 
   return {
     ok: true,
     message: "Order sent to kitchen.",
     orderId: savedOrderId,
   };
+}
+
+function isUniqueViolation(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505"
+  );
 }
 
 export async function deleteDraftOrder(id: string): Promise<ActionResult> {
@@ -270,8 +324,155 @@ export async function deleteDraftOrder(id: string): Promise<ActionResult> {
   revalidatePath("/pos");
   revalidatePath("/pos/orders");
   revalidatePath("/pos/tables");
+  revalidatePath("/kds");
+  publishKdsChanged({ orderId: id });
 
   return { ok: true, message: "Order deleted." };
+}
+
+export type TakePaymentResult = ActionResult<
+  keyof import("@/lib/validations/payment").PaymentInput
+> & {
+  orderId?: string;
+  receiptUrl?: string;
+  emailSent?: boolean;
+  emailMessage?: string;
+};
+
+export async function takePayment(
+  payload: unknown,
+): Promise<TakePaymentResult> {
+  await requireUser();
+
+  const parsed = paymentSchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.errors[0]?.message ?? "Invalid payment details.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const { orderId, method, tendered, reference } = parsed.data;
+  const methodConfig = await db.query.paymentMethods.findFirst({
+    where: and(eq(paymentMethods.type, method), eq(paymentMethods.enabled, true)),
+  });
+  if (!methodConfig) {
+    return { ok: false, error: "This payment method is not enabled." };
+  }
+  if (method === "upi" && !methodConfig.upiId?.trim()) {
+    return { ok: false, error: "UPI is enabled but no UPI ID is configured." };
+  }
+
+  const paymentResult = await db.transaction(async (tx) => {
+    const order = await tx.query.orders.findFirst({
+      where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
+      with: { customer: true },
+    });
+    if (!order) {
+      return { ok: false as const, error: "Draft order not found." };
+    }
+
+    const total = Number(order.total);
+    if (method === "cash" && (tendered == null || tendered < total)) {
+      return {
+        ok: false as const,
+        error: "Tendered cash must cover the order total.",
+        fieldErrors: {
+          tendered: ["Tendered cash must cover the order total."],
+        },
+      };
+    }
+
+    const changeDue = method === "cash" ? (tendered ?? 0) - total : null;
+    const paymentReference =
+      method === "cash"
+        ? tendered == null
+          ? null
+          : `Tendered ${tendered.toFixed(2)}`
+        : reference || (method === "upi" ? methodConfig.upiId : null);
+
+    await tx.insert(payments).values({
+      orderId: order.id,
+      method,
+      amount: total.toFixed(2),
+      changeDue: changeDue == null ? null : changeDue.toFixed(2),
+      reference: paymentReference,
+    });
+
+    await tx
+      .update(orders)
+      .set({
+        status: "paid",
+        updatedAt: new Date(),
+      })
+      .where(and(eq(orders.id, order.id), eq(orders.status, "draft")));
+
+    return {
+      ok: true as const,
+      orderId: order.id,
+      customerEmail: order.customer?.email ?? null,
+    };
+  });
+
+  if (!paymentResult.ok) {
+    return paymentResult;
+  }
+
+  revalidatePath("/pos");
+  revalidatePath("/pos/orders");
+  revalidatePath("/pos/tables");
+  revalidatePath(`/pos/orders/${paymentResult.orderId}`);
+  revalidatePath(`/receipt/${paymentResult.orderId}`);
+  revalidatePath("/kds");
+  publishKdsChanged({ orderId: paymentResult.orderId });
+
+  const receiptUrl = `${getAppUrl()}/receipt/${paymentResult.orderId}`;
+  const email = await sendReceiptEmail(paymentResult.orderId);
+  const emailSkipped = email.ok && email.skipped === true;
+  const emailSent = email.ok && !emailSkipped;
+  const emailMessage =
+    emailSkipped
+      ? email.reason
+      : email.ok
+        ? "Receipt emailed."
+        : email.error;
+
+  return {
+    ok: true,
+    message: "Payment recorded.",
+    orderId: paymentResult.orderId,
+    receiptUrl,
+    emailSent,
+    emailMessage,
+  };
+}
+
+export async function resendReceipt(
+  orderId: string,
+): Promise<ActionResult & { emailSent?: boolean }> {
+  await requireUser();
+
+  const order = await db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.status, "paid")),
+    with: { customer: true },
+  });
+  if (!order) {
+    return { ok: false, error: "Paid order not found." };
+  }
+  if (!order.customer?.email) {
+    return { ok: false, error: "This order has no customer email." };
+  }
+
+  const email = await sendReceiptEmail(orderId);
+  if (!email.ok) {
+    return { ok: false, error: email.error };
+  }
+  if (email.skipped === true) {
+    return { ok: false, error: email.reason };
+  }
+
+  return { ok: true, message: "Receipt resent.", emailSent: true };
 }
 
 export type CustomerActionResult = ActionResult<

@@ -1,17 +1,20 @@
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { db } from "@/lib/db";
 import {
   categories,
   coupons,
-  customers,
-  floors,
   orders,
   orderItems,
+  paymentMethods,
   products,
   promotions,
   tables,
 } from "@/lib/db/schema";
+import type * as schema from "@/lib/db/schema";
 import type { PromotionInput } from "./pricing";
+
+type DbClient = NodePgDatabase<typeof schema>;
 
 export async function getActiveProducts() {
   return db
@@ -111,8 +114,69 @@ export async function getOrderDetail(orderId: string) {
       table: { with: { floor: true } },
       items: true,
       coupon: true,
+      payments: true,
     },
   });
+}
+
+export async function getEnabledPaymentMethods() {
+  return db.query.paymentMethods.findMany({
+    where: eq(paymentMethods.enabled, true),
+    orderBy: (method, { asc }) => [asc(method.type)],
+  });
+}
+
+export async function getPayableOrder(orderId: string) {
+  return db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
+    with: {
+      customer: true,
+      table: { with: { floor: true } },
+      items: true,
+      payments: true,
+    },
+  });
+}
+
+export async function getOrderForReceipt(orderId: string) {
+  return db.query.orders.findFirst({
+    where: eq(orders.id, orderId),
+    with: {
+      customer: true,
+      employee: true,
+      table: { with: { floor: true } },
+      items: true,
+      coupon: true,
+      payments: {
+        orderBy: (payment, { asc }) => [asc(payment.createdAt)],
+      },
+    },
+  });
+}
+
+export async function getKitchenTickets() {
+  const rows = await db.query.orders.findMany({
+    where: and(
+      ne(orders.status, "cancelled"),
+      sql`(
+        ${orders.kdsStage} in ('to_cook', 'preparing')
+        or (
+          ${orders.kdsStage} = 'completed'
+          and ${orders.updatedAt} >= now() - interval '10 minutes'
+        )
+      )`,
+    ),
+    with: {
+      table: { with: { floor: true } },
+      items: {
+        where: eq(orderItems.isKitchenItem, true),
+        orderBy: (item, { asc }) => [asc(item.createdAt)],
+      },
+    },
+    orderBy: [asc(orders.sentToKitchenAt), asc(orders.createdAt)],
+  });
+
+  return rows.filter((order) => order.items.length > 0);
 }
 
 export async function getCustomers() {
@@ -138,18 +202,26 @@ export async function getProductsByIds(ids: string[]) {
   });
 }
 
-export async function generateOrderNumber(sessionId: string) {
+export async function generateOrderNumber(
+  sessionId: string,
+  tx: DbClient = db,
+) {
   const today = new Date();
   const datePart = today.toISOString().slice(0, 10).replace(/-/g, "");
   const prefix = `ORD-${datePart}-`;
 
-  const existing = await db.query.orders.findMany({
-    where: and(
-      eq(orders.sessionId, sessionId),
-      sql`${orders.orderNumber} like ${prefix + "%"}`,
-    ),
-  });
+  const [row] = await tx
+    .select({
+      maxSuffix: sql<number | null>`max(nullif(substring(${orders.orderNumber} from ${prefix.length + 1}), '')::int)`,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.sessionId, sessionId),
+        sql`${orders.orderNumber} like ${prefix + "%"}`,
+      ),
+    );
 
-  const next = existing.length + 1;
+  const next = (row?.maxSuffix ?? 0) + 1;
   return `${prefix}${String(next).padStart(4, "0")}`;
 }

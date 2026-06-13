@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useKdsStream } from "@/lib/realtime/use-kds-stream";
 import { cn } from "@/lib/utils";
 
 export type FloorWithTables = {
@@ -28,6 +29,7 @@ export function TableGrid({
   linkPrefix = "/pos?table=",
 }: TableGridProps) {
   const router = useRouter();
+  useKdsStream();
   const occupied = new Set(occupiedTableIds);
 
   function handleSelect(tableId: string) {

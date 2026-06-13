@@ -6,17 +6,27 @@ import {
   OrderStatusBadge,
 } from "@/components/pos/order-detail-actions";
 import { requireUser } from "@/lib/auth";
-import { getOrderDetail } from "@/lib/pos/queries";
+import {
+  getEnabledPaymentMethods,
+  getOrderDetail,
+} from "@/lib/pos/queries";
+import { buildQrDataUrl, buildUpiPaymentUrl } from "@/lib/pos/upi";
 import { formatMoney } from "@/lib/pos/pricing";
+import { getReceiptBrand } from "@/lib/receipt-brand";
 
 type Props = {
   params: Promise<{ orderId: string }>;
+  searchParams: Promise<{ pay?: string }>;
 };
 
-export default async function OrderDetailPage({ params }: Props) {
+export default async function OrderDetailPage({ params, searchParams }: Props) {
   await requireUser();
   const { orderId } = await params;
-  const order = await getOrderDetail(orderId);
+  const [{ pay }, order, paymentMethods] = await Promise.all([
+    searchParams,
+    getOrderDetail(orderId),
+    getEnabledPaymentMethods(),
+  ]);
   if (!order) notFound();
 
   const editPayload =
@@ -28,12 +38,12 @@ export default async function OrderDetailPage({ params }: Props) {
             .filter((item) => item.productId)
             .map((item) => ({
               productId: item.productId!,
-            name: item.nameSnapshot,
-            unitPrice: Number(item.unitPrice),
-            taxRate: Number(item.taxRateSnapshot),
-            qty: item.quantity,
-            isKitchenItem: item.isKitchenItem,
-          })),
+              name: item.nameSnapshot,
+              unitPrice: Number(item.unitPrice),
+              taxRate: Number(item.taxRateSnapshot),
+              qty: item.quantity,
+              isKitchenItem: item.isKitchenItem,
+            })),
           couponCode: order.coupon?.code,
           couponId: order.coupon?.id,
           couponDiscountType: order.coupon?.discountType as
@@ -43,8 +53,24 @@ export default async function OrderDetailPage({ params }: Props) {
           couponValue: order.coupon ? Number(order.coupon.value) : undefined,
           customerId: order.customerId ?? undefined,
           customerName: order.customer?.name,
-        }
+      }
       : undefined;
+  const upiMethod = paymentMethods.find(
+    (method) => method.type === "upi" && method.upiId,
+  );
+  const upiPaymentUrl =
+    order.status === "draft" && upiMethod?.upiId
+      ? buildUpiPaymentUrl({
+          upiId: upiMethod.upiId,
+          payeeName: getReceiptBrand().name,
+          amount: Number(order.total),
+          orderNumber: order.orderNumber,
+        })
+      : null;
+  const upiQrDataUrl = upiPaymentUrl
+    ? await buildQrDataUrl(upiPaymentUrl)
+    : null;
+  const primaryPayment = order.payments[0] ?? null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
@@ -81,7 +107,47 @@ export default async function OrderDetailPage({ params }: Props) {
           <dt className="text-muted-foreground">Amount</dt>
           <dd className="font-medium">{formatMoney(Number(order.total))}</dd>
         </div>
+        {primaryPayment ? (
+          <>
+            <div>
+              <dt className="text-muted-foreground">Payment</dt>
+              <dd className="font-medium uppercase">{primaryPayment.method}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Paid at</dt>
+              <dd className="font-medium">
+                {new Date(primaryPayment.createdAt).toLocaleString()}
+              </dd>
+            </div>
+          </>
+        ) : null}
       </dl>
+
+      {primaryPayment ? (
+        <div className="rounded-lg border p-4 text-sm">
+          <h2 className="mb-3 font-semibold">Payment breakdown</h2>
+          <dl className="grid grid-cols-2 gap-3">
+            <div>
+              <dt className="text-muted-foreground">Amount paid</dt>
+              <dd className="font-medium">
+                {formatMoney(Number(primaryPayment.amount))}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Change due</dt>
+              <dd className="font-medium">
+                {primaryPayment.changeDue
+                  ? formatMoney(Number(primaryPayment.changeDue))
+                  : "—"}
+              </dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-muted-foreground">Reference</dt>
+              <dd className="font-medium">{primaryPayment.reference ?? "—"}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
 
       <div>
         <h2 className="mb-2 text-sm font-semibold">Products</h2>
@@ -98,8 +164,20 @@ export default async function OrderDetailPage({ params }: Props) {
 
       <OrderDetailActions
         orderId={order.id}
+        orderNumber={order.orderNumber}
+        total={Number(order.total)}
+        tableId={order.tableId}
         status={order.status}
         editPayload={editPayload}
+        paymentMethods={paymentMethods.map((method) => ({
+          type: method.type,
+          enabled: method.enabled,
+          upiId: method.upiId,
+        }))}
+        upiPaymentUrl={upiPaymentUrl}
+        upiQrDataUrl={upiQrDataUrl}
+        defaultPayOpen={order.status === "draft" && pay === "1"}
+        customerEmail={order.customer?.email}
       />
     </div>
   );

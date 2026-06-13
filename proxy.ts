@@ -9,8 +9,12 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const role = req.auth?.user?.role;
 
-  // Kitchen Display is a fixed public URL meant for a shared kitchen screen.
-  if (path === "/kds" || path.startsWith("/kds/")) {
+  // Kitchen Display and digital receipts are fixed public demo/customer URLs.
+  if (
+    path === "/kds" ||
+    path.startsWith("/kds/") ||
+    path.startsWith("/receipt/")
+  ) {
     return;
   }
 

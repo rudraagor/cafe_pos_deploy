@@ -1,13 +1,38 @@
-import { Monitor } from "lucide-react";
+import { cookies } from "next/headers";
+import { KdsBoard } from "@/components/kds/kds-board";
+import { KdsPinGate } from "@/components/kds/kds-pin-gate";
+import { KDS_UNLOCK_COOKIE } from "@/lib/kds/access";
+import { getKitchenTickets } from "@/lib/pos/queries";
 
-export default function KdsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function KdsPage() {
+  const cookieStore = await cookies();
+  const unlocked = cookieStore.get(KDS_UNLOCK_COOKIE)?.value === "true";
+  if (!unlocked) return <KdsPinGate />;
+
+  const tickets = await getKitchenTickets();
+
   return (
-    <div className="flex min-h-[calc(100vh-7rem)] flex-col items-center justify-center gap-3 text-center">
-      <Monitor className="size-10 text-muted-foreground" />
-      <h1 className="text-xl font-semibold">Kitchen Display</h1>
-      <p className="max-w-md text-sm text-muted-foreground">
-        Real-time order tickets arrive in the KDS milestone.
-      </p>
-    </div>
+    <KdsBoard
+      tickets={tickets.map((ticket) => ({
+        id: ticket.id,
+        orderNumber: ticket.orderNumber,
+        stage: ticket.kdsStage,
+        status: ticket.status,
+        tableLabel: ticket.table
+          ? `${ticket.table.floor?.name ?? "Floor"} / T${ticket.table.number}`
+          : "Takeaway",
+        sentToKitchenAt: (
+          ticket.sentToKitchenAt ?? ticket.createdAt
+        ).toISOString(),
+        items: ticket.items.map((item) => ({
+          id: item.id,
+          nameSnapshot: item.nameSnapshot,
+          quantity: item.quantity,
+          itemCompleted: item.itemCompleted,
+        })),
+      }))}
+    />
   );
 }
