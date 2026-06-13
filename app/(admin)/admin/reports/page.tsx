@@ -1,17 +1,10 @@
 import { Download } from "lucide-react";
-import { AiWidgets } from "@/components/reports/ai-widgets";
-import { DashboardCharts } from "@/components/reports/report-charts";
-import { KpiCards } from "@/components/reports/kpi-cards";
+import { DashboardCanvas } from "@/components/reports/dashboard-canvas";
 import { LiveToggle } from "@/components/reports/live-toggle";
 import { RangePicker } from "@/components/reports/range-picker";
-import {
-  SessionsLinkCard,
-  TopCategoriesTable,
-  TopOrdersTable,
-  TopProductsTable,
-} from "@/components/reports/report-tables";
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
+import { getAdminLiveFloor } from "@/lib/reports/customers";
 import {
   getReportDashboard,
   getReportFilterOptions,
@@ -31,9 +24,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   await requireRole("admin");
   const params = await searchParams;
   const filters = parseReportFilters(params);
-  const [dashboard, filterOptions] = await Promise.all([
+  const [dashboard, filterOptions, liveFloor] = await Promise.all([
     getReportDashboard(filters),
     getReportFilterOptions(),
+    getAdminLiveFloor(),
   ]);
   const exportParams = rangeToSearchParams(filters);
   const csvHref = `/admin/reports/export.csv?${exportParams}`;
@@ -82,23 +76,11 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       </div>
 
       <RangePicker filters={filters} options={filterOptions} />
-      <KpiCards summary={dashboard.summary} />
-      <DashboardCharts
-        revenueByDay={dashboard.revenueByDay}
-        salesByHour={dashboard.salesByHour}
-        topProducts={dashboard.topProducts}
-        salesByCategory={dashboard.salesByCategory}
-        paymentMix={dashboard.paymentMix}
+      <DashboardCanvas
+        dashboard={dashboard}
+        liveFloor={liveFloor}
+        params={params}
       />
-      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <TopProductsTable rows={dashboard.topProducts} />
-        <SessionsLinkCard />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <TopOrdersTable rows={dashboard.topOrders} />
-        <TopCategoriesTable rows={dashboard.salesByCategory} />
-      </div>
-      <AiWidgets params={params} />
     </div>
   );
 }

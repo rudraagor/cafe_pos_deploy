@@ -218,17 +218,29 @@ orders no longer block the table.
 3. Check Today, Last 7 days, This Month, and Custom filters.
 4. Verify whether Employee, Session, and Product filters exist and affect the
    dataset.
-5. Verify KPIs, sales trend, sales by hour, category chart, product table, and
-   payment mix update with each filter.
-6. Enable live reports if available and confirm paid orders publish report
-   updates without exposing the stream to unauthorized users.
-7. Export CSV, XLSX, and PDF and inspect that each uses the selected filters.
-8. With `OPENAI_API_KEY` set, generate the daily briefing, inventory forecast,
-   and a grounded question answer. Verify the answer is scoped to the selected
-   filters.
+5. Verify KPI tiles show revenue, orders, AOV, gross, tax, discounts, items
+   sold, and dine-in share with delta badges vs the prior period.
+6. Use **Customize** to hide/show and reorder widgets; refresh the page and
+   confirm layout persists in this browser.
+7. Sort table columns (qty, revenue, amount, paid-at) ascending and descending
+   in top products, categories, orders, live floor, and marketing tables.
+8. Click a customer name in top orders or live floor and confirm the profile
+   popup shows email/phone, range stats, and recent orders.
+9. In **Customer marketing**, search customers, open a profile, and send an
+   active coupon email when Resend is configured; confirm graceful errors when
+   email is missing or Resend is unset.
+10. Enable live reports if available and confirm paid orders publish report
+    updates without exposing the stream to unauthorized users.
+11. Export CSV, XLSX, and PDF and inspect comparison, employee, and
+    fulfillment sections plus the selected filters.
+12. With `OPENAI_API_KEY` set, generate the daily briefing, inventory forecast,
+    and a grounded question answer. Use **Regenerate** to bypass cache, and test
+    copy/download from the briefing dialog. Verify the answer is scoped to the
+    selected filters.
 
-Expected result: report data updates by range and AI responses use aggregate
-report context only.
+Expected result: report data updates by range, widgets are configurable per
+browser, tables sort client-side, CRM/marketing actions stay admin-only, and AI
+responses use aggregate report context only.
 
 ## Current Coverage Gaps To Manually Watch
 

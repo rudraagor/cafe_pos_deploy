@@ -1,17 +1,8 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth";
-import { formatMoney } from "@/lib/pos/pricing";
-import { getSessionList } from "@/lib/reports/queries";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { SessionListTable } from "@/components/reports/session-list-table";
 import { Button } from "@/components/ui/button";
+import { requireRole } from "@/lib/auth";
+import { getSessionList } from "@/lib/reports/queries";
 
 export default async function SessionReportsPage() {
   await requireRole("admin");
@@ -33,49 +24,17 @@ export default async function SessionReportsPage() {
         </Button>
       </div>
 
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Opened</TableHead>
-              <TableHead>Cashier</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Paid orders</TableHead>
-              <TableHead>Revenue</TableHead>
-              <TableHead>Closing amount</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sessions.map((session) => (
-              <TableRow key={session.id}>
-                <TableCell>{session.openedAt.toLocaleString()}</TableCell>
-                <TableCell>{session.cashier ?? "Unknown"}</TableCell>
-                <TableCell>
-                  <Badge variant={session.status === "open" ? "secondary" : "default"}>
-                    {session.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{session.paidOrders}</TableCell>
-                <TableCell>{formatMoney(session.revenue)}</TableCell>
-                <TableCell>
-                  {session.closingAmount == null
-                    ? "Open"
-                    : formatMoney(session.closingAmount)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link
-                    href={`/admin/reports/sessions/${session.id}`}
-                    className="text-sm underline"
-                  >
-                    View
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <SessionListTable
+        sessions={sessions.map((session) => ({
+          id: session.id,
+          openedAt: session.openedAt.toISOString(),
+          status: session.status,
+          cashier: session.cashier,
+          paidOrders: session.paidOrders,
+          revenue: session.revenue,
+          closingAmount: session.closingAmount,
+        }))}
+      />
     </div>
   );
 }

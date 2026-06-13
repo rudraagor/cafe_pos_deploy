@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Sparkles } from "lucide-react";
+import { Copy, Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { AiMarkdown } from "@/components/reports/ai-markdown";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type AiBriefingDialogProps = {
   open: boolean;
@@ -21,6 +22,7 @@ type AiBriefingDialogProps = {
   loading?: boolean;
   onRegenerate?: () => void;
   regeneratePending?: boolean;
+  downloadFilename?: string;
 };
 
 export function AiBriefingDialog({
@@ -32,7 +34,38 @@ export function AiBriefingDialog({
   loading = false,
   onRegenerate,
   regeneratePending = false,
+  downloadFilename = "ai-report",
 }: AiBriefingDialogProps) {
+  async function copyContent() {
+    if (!content) return;
+    await navigator.clipboard.writeText(content);
+    toast.success("Copied to clipboard.");
+  }
+
+  function downloadMarkdown() {
+    if (!content) return;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${downloadFilename}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success("Markdown downloaded.");
+  }
+
+  function downloadText() {
+    if (!content) return;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${downloadFilename}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success("Text file downloaded.");
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
@@ -60,6 +93,22 @@ export function AiBriefingDialog({
         </div>
 
         <DialogFooter className="border-t px-4 py-4">
+          {content ? (
+            <>
+              <Button type="button" variant="outline" onClick={copyContent}>
+                <Copy className="size-4" />
+                Copy
+              </Button>
+              <Button type="button" variant="outline" onClick={downloadMarkdown}>
+                <Download className="size-4" />
+                .md
+              </Button>
+              <Button type="button" variant="outline" onClick={downloadText}>
+                <FileText className="size-4" />
+                .txt
+              </Button>
+            </>
+          ) : null}
           {onRegenerate ? (
             <Button
               type="button"

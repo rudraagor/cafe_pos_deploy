@@ -47,6 +47,136 @@ function toNumber(value: string | number | null | undefined) {
   return Number(value ?? 0);
 }
 
+function getPreviousPeriod(filters: ReportRange | ReportFilters): ReportRange {
+  const duration = filters.end.getTime() - filters.start.getTime();
+  return {
+    preset: filters.preset,
+    start: new Date(filters.start.getTime() - duration),
+    end: filters.start,
+  };
+}
+
+function deltaPercent(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? 0 : 100;
+  return ((current - previous) / previous) * 100;
+}
+
+export async function getPeriodComparison(filters: ReportRange | ReportFilters) {
+  const previous = getPreviousPeriod(filters);
+  const [current, prior] = await Promise.all([
+    getSalesSummary(filters),
+    getSalesSummary(previous),
+  ]);
+
+  return {
+    current,
+    previous: prior,
+    revenueDelta: deltaPercent(current.revenue, prior.revenue),
+    orderCountDelta: deltaPercent(current.orderCount, prior.orderCount),
+    aovDelta: deltaPercent(current.averageOrderValue, prior.averageOrderValue),
+    discountDelta: deltaPercent(current.discountTotal, prior.discountTotal),
+    taxDelta: deltaPercent(current.taxTotal, prior.taxTotal),
+    grossDelta: deltaPercent(current.gross, prior.gross),
+  };
+}
+
+export async function getItemsSold(filters: ReportRange | ReportFilters) {
+  const [row] = await db
+    .select({
+      quantity: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(paidLineItemsWhere(filters));
+  return toNumber(row?.quantity);
+}
+
+export async function getSalesByEmployee(
+  filters: ReportRange | ReportFilters,
+  limit = 10,
+) {
+  const rows = await db
+    .select({
+      employeeId: orders.employeeId,
+      employee: users.name,
+      revenue: sql<string>`coalesce(sum(${orders.total}), 0)`,
+      orderCount: sql<number>`count(${orders.id})::int`,
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.employeeId, users.id))
+    .where(paidOrdersWhere(filters))
+    .groupBy(orders.employeeId, users.name)
+    .orderBy(desc(sql`sum(${orders.total})`))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    employeeId: row.employeeId,
+    employee: row.employee ?? "Unknown",
+    revenue: toNumber(row.revenue),
+    orderCount: toNumber(row.orderCount),
+  }));
+}
+
+export async function getSalesByFulfillment(filters: ReportRange | ReportFilters) {
+  const rows = await db
+    .select({
+      fulfillmentType: orders.fulfillmentType,
+      revenue: sql<string>`coalesce(sum(${orders.total}), 0)`,
+      orderCount: sql<number>`count(${orders.id})::int`,
+    })
+    .from(orders)
+    .where(paidOrdersWhere(filters))
+    .groupBy(orders.fulfillmentType);
+
+  return rows.map((row) => ({
+    fulfillmentType: row.fulfillmentType,
+    label: row.fulfillmentType === "dine_in" ? "Dine in" : "Takeaway",
+    revenue: toNumber(row.revenue),
+    orderCount: toNumber(row.orderCount),
+  }));
+}
+
+export async function getDiscountBreakdown(filters: ReportRange | ReportFilters) {
+  const [row] = await db
+    .select({
+      totalDiscount: sql<string>`coalesce(sum(${orders.discountTotal}), 0)`,
+      couponDiscount: sql<string>`coalesce(sum(${orders.discountTotal}) filter (where ${orders.couponId} is not null), 0)`,
+      couponOrders: sql<number>`count(${orders.id}) filter (where ${orders.couponId} is not null)::int`,
+    })
+    .from(orders)
+    .where(paidOrdersWhere(filters));
+
+  const totalDiscount = toNumber(row?.totalDiscount);
+  const couponDiscount = toNumber(row?.couponDiscount);
+  return {
+    totalDiscount,
+    couponDiscount,
+    promotionDiscount: Math.max(0, totalDiscount - couponDiscount),
+    couponOrders: toNumber(row?.couponOrders),
+  };
+}
+
+export async function getSalesByDayOfWeek(filters: ReportRange | ReportFilters) {
+  const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const rows = await db
+    .select({
+      day: sql<number>`extract(dow from ${orders.updatedAt})::int`,
+      revenue: sql<string>`coalesce(sum(${orders.total}), 0)`,
+      orders: sql<number>`count(${orders.id})::int`,
+    })
+    .from(orders)
+    .where(paidOrdersWhere(filters))
+    .groupBy(sql`extract(dow from ${orders.updatedAt})`)
+    .orderBy(sql`extract(dow from ${orders.updatedAt})`);
+
+  return rows.map((row) => ({
+    label: labels[row.day] ?? String(row.day),
+    day: row.day,
+    revenue: toNumber(row.revenue),
+    orders: toNumber(row.orders),
+  }));
+}
+
 export async function getSalesSummary(filters: ReportRange | ReportFilters) {
   const [row] = await db
     .select({
@@ -198,6 +328,7 @@ export async function getTopOrders(
     with: {
       customer: true,
       employee: true,
+      table: true,
     },
     orderBy: [desc(orders.total)],
     limit,
@@ -206,16 +337,22 @@ export async function getTopOrders(
   return rows.map((row) => ({
     id: row.id,
     orderNumber: row.orderNumber,
+    customerId: row.customerId,
     customer: row.customer?.name ?? "Walk-in",
     employee: row.employee?.name ?? "Unknown",
+    tableNumber: row.table?.number ?? null,
     paidAt: row.updatedAt,
     total: Number(row.total),
   }));
 }
 
-export async function getReportDashboard(filters: ReportRange | ReportFilters) {
+export async function getExtendedReportDashboard(
+  filters: ReportRange | ReportFilters,
+) {
   const [
     summary,
+    comparison,
+    itemsSold,
     revenueByDay,
     salesByHour,
     topProducts,
@@ -223,19 +360,31 @@ export async function getReportDashboard(filters: ReportRange | ReportFilters) {
     paymentMix,
     productVelocity,
     topOrders,
+    salesByEmployee,
+    salesByFulfillment,
+    discountBreakdown,
+    salesByDayOfWeek,
   ] = await Promise.all([
     getSalesSummary(filters),
+    getPeriodComparison(filters),
+    getItemsSold(filters),
     getRevenueByDay(filters),
     getSalesByHour(filters),
-    getTopProducts(filters),
+    getTopProducts(filters, 10),
     getSalesByCategory(filters),
     getPaymentMix(filters),
     getProductVelocity(filters),
-    getTopOrders(filters),
+    getTopOrders(filters, 10),
+    getSalesByEmployee(filters),
+    getSalesByFulfillment(filters),
+    getDiscountBreakdown(filters),
+    getSalesByDayOfWeek(filters),
   ]);
 
   return {
     summary,
+    comparison,
+    itemsSold,
     revenueByDay,
     salesByHour,
     topProducts,
@@ -243,6 +392,30 @@ export async function getReportDashboard(filters: ReportRange | ReportFilters) {
     paymentMix,
     productVelocity,
     topOrders,
+    salesByEmployee,
+    salesByFulfillment,
+    discountBreakdown,
+    salesByDayOfWeek,
+  };
+}
+
+export async function getReportDashboard(filters: ReportRange | ReportFilters) {
+  const extended = await getExtendedReportDashboard(filters);
+  return {
+    summary: extended.summary,
+    comparison: extended.comparison,
+    itemsSold: extended.itemsSold,
+    revenueByDay: extended.revenueByDay,
+    salesByHour: extended.salesByHour,
+    topProducts: extended.topProducts,
+    salesByCategory: extended.salesByCategory,
+    paymentMix: extended.paymentMix,
+    productVelocity: extended.productVelocity,
+    topOrders: extended.topOrders,
+    salesByEmployee: extended.salesByEmployee,
+    salesByFulfillment: extended.salesByFulfillment,
+    discountBreakdown: extended.discountBreakdown,
+    salesByDayOfWeek: extended.salesByDayOfWeek,
   };
 }
 
@@ -370,15 +543,29 @@ export async function getSessionReport(sessionId: string) {
 }
 
 export async function getDashboardCsvRows(filters: ReportRange | ReportFilters) {
-  const [summary, topProducts, categories, payments, hours, topOrders] =
-    await Promise.all([
-      getSalesSummary(filters),
-      getTopProducts(filters, 50),
-      getSalesByCategory(filters),
-      getPaymentMix(filters),
-      getSalesByHour(filters),
-      getTopOrders(filters, 50),
-    ]);
+  const [
+    summary,
+    comparison,
+    topProducts,
+    categories,
+    payments,
+    hours,
+    topOrders,
+    employees,
+    fulfillment,
+    discountBreakdown,
+  ] = await Promise.all([
+    getSalesSummary(filters),
+    getPeriodComparison(filters),
+    getTopProducts(filters, 50),
+    getSalesByCategory(filters),
+    getPaymentMix(filters),
+    getSalesByHour(filters),
+    getTopOrders(filters, 50),
+    getSalesByEmployee(filters, 50),
+    getSalesByFulfillment(filters),
+    getDiscountBreakdown(filters),
+  ]);
 
   const rows: Record<string, string | number>[] = [
     { section: "summary", label: "revenue", value: summary.revenue },
@@ -386,6 +573,11 @@ export async function getDashboardCsvRows(filters: ReportRange | ReportFilters) 
     { section: "summary", label: "aov", value: summary.averageOrderValue },
     { section: "summary", label: "discounts", value: summary.discountTotal },
     { section: "summary", label: "tax", value: summary.taxTotal },
+    { section: "summary", label: "gross", value: summary.gross },
+    { section: "comparison", label: "revenue_delta_pct", value: comparison.revenueDelta },
+    { section: "comparison", label: "orders_delta_pct", value: comparison.orderCountDelta },
+    { section: "discount_breakdown", label: "coupon_discount", value: discountBreakdown.couponDiscount },
+    { section: "discount_breakdown", label: "promotion_discount", value: discountBreakdown.promotionDiscount },
     ...topProducts.map((row) => ({
       section: "top_product",
       label: row.product,
@@ -416,6 +608,18 @@ export async function getDashboardCsvRows(filters: ReportRange | ReportFilters) 
       section: "hour",
       label: row.label,
       count: row.orders,
+      value: row.revenue,
+    })),
+    ...employees.map((row) => ({
+      section: "employee",
+      label: row.employee,
+      count: row.orderCount,
+      value: row.revenue,
+    })),
+    ...fulfillment.map((row) => ({
+      section: "fulfillment",
+      label: row.label,
+      count: row.orderCount,
       value: row.revenue,
     })),
   ];

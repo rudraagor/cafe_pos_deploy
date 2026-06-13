@@ -1,0 +1,212 @@
+import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  customers,
+  floors,
+  orderItems,
+  orders,
+  posSessions,
+  tables,
+} from "@/lib/db/schema";
+import type { ReportFilters, ReportRange } from "./range";
+
+function paidOrdersWhere(filters: ReportRange | ReportFilters) {
+  const conditions = [
+    eq(orders.status, "paid"),
+    gte(orders.updatedAt, filters.start),
+    lt(orders.updatedAt, filters.end),
+  ];
+  if ("employeeId" in filters && filters.employeeId) {
+    conditions.push(eq(orders.employeeId, filters.employeeId));
+  }
+  if ("sessionId" in filters && filters.sessionId) {
+    conditions.push(eq(orders.sessionId, filters.sessionId));
+  }
+  return and(...conditions);
+}
+
+function serializeDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  return value;
+}
+
+export async function getCustomerProfile(
+  customerId: string,
+  filters: ReportRange | ReportFilters,
+) {
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.id, customerId),
+  });
+  if (!customer) return null;
+
+  const [stats] = await db
+    .select({
+      orderCount: sql<number>`count(${orders.id})::int`,
+      totalSpend: sql<string>`coalesce(sum(${orders.total}), 0)`,
+      lastOrderAt: sql<Date | null>`max(${orders.updatedAt})`,
+    })
+    .from(orders)
+    .where(and(paidOrdersWhere(filters), eq(orders.customerId, customerId)));
+
+  const [favorite] = await db
+    .select({
+      product: orderItems.nameSnapshot,
+      quantity: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(paidOrdersWhere(filters), eq(orders.customerId, customerId)))
+    .groupBy(orderItems.nameSnapshot)
+    .orderBy(desc(sql`sum(${orderItems.quantity})`))
+    .limit(1);
+
+  return {
+    id: customer.id,
+    name: customer.name,
+    email: customer.email,
+    phone: customer.phone,
+    createdAt: serializeDate(customer.createdAt),
+    orderCount: Number(stats?.orderCount ?? 0),
+    totalSpend: Number(stats?.totalSpend ?? 0),
+    lastOrderAt: serializeDate(stats?.lastOrderAt),
+    favoriteProduct: favorite?.product ?? null,
+  };
+}
+
+export async function getCustomerOrderHistory(
+  customerId: string,
+  filters: ReportRange | ReportFilters,
+  limit = 10,
+) {
+  const rows = await db.query.orders.findMany({
+    where: and(paidOrdersWhere(filters), eq(orders.customerId, customerId)),
+    with: { employee: true, table: true },
+    orderBy: [desc(orders.updatedAt)],
+    limit,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    orderNumber: row.orderNumber,
+    paidAt: serializeDate(row.updatedAt),
+    employee: row.employee?.name ?? "Unknown",
+    tableNumber: row.table?.number ?? null,
+    total: Number(row.total),
+  }));
+}
+
+export async function searchCustomersForMarketing(
+  query: string,
+  filters: ReportRange | ReportFilters,
+  limit = 50,
+) {
+  const trimmed = query.trim();
+
+  const baseQuery = db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      email: customers.email,
+      phone: customers.phone,
+      orderCount: sql<number>`count(${orders.id})::int`,
+      totalSpend: sql<string>`coalesce(sum(${orders.total}), 0)`,
+      lastOrderAt: sql<Date | null>`max(${orders.updatedAt})`,
+    })
+    .from(customers)
+    .leftJoin(
+      orders,
+      and(paidOrdersWhere(filters), eq(orders.customerId, customers.id)),
+    )
+    .groupBy(customers.id);
+
+  const rows = trimmed
+    ? await baseQuery
+        .where(
+          or(
+            ilike(customers.name, `%${trimmed}%`),
+            ilike(customers.email, `%${trimmed}%`),
+            ilike(customers.phone, `%${trimmed}%`),
+          ),
+        )
+        .orderBy(desc(sql`coalesce(sum(${orders.total}), 0)`))
+        .limit(limit)
+    : await baseQuery
+        .orderBy(desc(sql`coalesce(sum(${orders.total}), 0)`))
+        .limit(limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    orderCount: Number(row.orderCount),
+    totalSpend: Number(row.totalSpend),
+    lastOrderAt: serializeDate(row.lastOrderAt),
+  }));
+}
+
+export async function getAdminLiveFloor() {
+  const openSession = await db.query.posSessions.findFirst({
+    where: eq(posSessions.status, "open"),
+    orderBy: [desc(posSessions.openedAt)],
+  });
+  if (!openSession) {
+    return { sessionOpen: false as const, floors: [] as LiveFloorEntry[] };
+  }
+
+  const activeOrders = await db
+    .select({
+      orderId: orders.id,
+      orderNumber: orders.orderNumber,
+      status: orders.status,
+      kdsStage: orders.kdsStage,
+      total: orders.total,
+      tableId: orders.tableId,
+      tableNumber: tables.number,
+      floorName: floors.name,
+      customerId: customers.id,
+      customerName: customers.name,
+    })
+    .from(orders)
+    .innerJoin(tables, eq(orders.tableId, tables.id))
+    .innerJoin(floors, eq(tables.floorId, floors.id))
+    .leftJoin(customers, eq(orders.customerId, customers.id))
+    .where(
+      and(
+        eq(orders.sessionId, openSession.id),
+        eq(orders.fulfillmentType, "dine_in"),
+        sql`${orders.status} <> 'cancelled'`,
+        sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
+      ),
+    )
+    .orderBy(floors.name, tables.number);
+
+  return {
+    sessionOpen: true as const,
+    sessionId: openSession.id,
+    floors: activeOrders.map((row) => ({
+      orderId: row.orderId,
+      orderNumber: row.orderNumber,
+      status: row.status,
+      kdsStage: row.kdsStage,
+      total: Number(row.total),
+      tableNumber: row.tableNumber,
+      floorName: row.floorName,
+      customerId: row.customerId,
+      customerName: row.customerName ?? "Walk-in",
+    })),
+  };
+}
+
+export type LiveFloorEntry = {
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  kdsStage: string;
+  total: number;
+  tableNumber: number;
+  floorName: string;
+  customerId: string | null;
+  customerName: string;
+};

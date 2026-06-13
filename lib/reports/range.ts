@@ -101,9 +101,37 @@ export function formatDateInput(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+const REPORT_LOCALE = "en-IN";
+const REPORT_TIME_ZONE = "Asia/Kolkata";
+
+function toValidDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatReportDateTime(value: Date | string | null | undefined) {
+  const date = toValidDate(value);
+  if (!date) return "—";
+  return new Intl.DateTimeFormat(REPORT_LOCALE, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: REPORT_TIME_ZONE,
+  }).format(date);
+}
+
+export function formatReportDate(value: Date | string | null | undefined) {
+  const date = toValidDate(value);
+  if (!date) return "—";
+  return new Intl.DateTimeFormat(REPORT_LOCALE, {
+    dateStyle: "medium",
+    timeZone: REPORT_TIME_ZONE,
+  }).format(date);
+}
+
 export function formatRangeLabel(range: ReportRange) {
-  const start = range.start.toLocaleDateString();
-  const end = addDays(range.end, -1).toLocaleDateString();
+  const start = formatReportDate(range.start);
+  const end = formatReportDate(addDays(range.end, -1));
   return start === end ? start : `${start} - ${end}`;
 }
 

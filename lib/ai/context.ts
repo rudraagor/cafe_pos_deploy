@@ -1,16 +1,39 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { posSessions, products, users } from "@/lib/db/schema";
-import { getReportDashboard } from "@/lib/reports/queries";
+import {
+  getPeriodComparison,
+  getReportDashboard,
+  getSalesByDayOfWeek,
+  getSalesByEmployee,
+  getSalesByFulfillment,
+} from "@/lib/reports/queries";
 import type { ReportFilters, ReportRange } from "@/lib/reports/range";
 import { formatRangeLabel } from "@/lib/reports/range";
+import { formatMoney } from "@/lib/pos/pricing";
+
+export const AI_CURRENCY_INSTRUCTION =
+  "This cafe operates in India. All monetary values are Indian Rupees (INR). Always write amounts with the ₹ symbol (for example ₹1,234.56). Never use $, USD, or dollars.";
 
 export async function buildReportAiContext(filters: ReportRange | ReportFilters) {
-  const [dashboard, labels] = await Promise.all([
+  const [
+    dashboard,
+    labels,
+    comparison,
+    salesByEmployee,
+    salesByFulfillment,
+    salesByDayOfWeek,
+  ] = await Promise.all([
     getReportDashboard(filters),
     getFilterLabels(filters),
+    getPeriodComparison(filters),
+    getSalesByEmployee(filters, 5),
+    getSalesByFulfillment(filters),
+    getSalesByDayOfWeek(filters),
   ]);
+
   return {
+    currency: "INR (₹)",
     range: {
       preset: filters.preset,
       label: formatRangeLabel(filters),
@@ -18,44 +41,88 @@ export async function buildReportAiContext(filters: ReportRange | ReportFilters)
       end: filters.end.toISOString(),
     },
     filters: labels,
-    summary: dashboard.summary,
-    revenueByDay: dashboard.revenueByDay,
-    salesByHour: dashboard.salesByHour,
-    topProducts: dashboard.topProducts,
+    summary: {
+      revenue: formatMoney(dashboard.summary.revenue),
+      gross: formatMoney(dashboard.summary.gross),
+      orderCount: dashboard.summary.orderCount,
+      averageOrderValue: formatMoney(dashboard.summary.averageOrderValue),
+      discountTotal: formatMoney(dashboard.summary.discountTotal),
+      taxTotal: formatMoney(dashboard.summary.taxTotal),
+    },
+    comparison: {
+      revenueDeltaPct: comparison.revenueDelta,
+      orderCountDeltaPct: comparison.orderCountDelta,
+      aovDeltaPct: comparison.aovDelta,
+    },
+    revenueByDay: dashboard.revenueByDay.map((row) => ({
+      label: row.label,
+      revenue: formatMoney(row.revenue),
+      orders: row.orders,
+    })),
+    salesByHour: dashboard.salesByHour.map((row) => ({
+      label: row.label,
+      revenue: formatMoney(row.revenue),
+      orders: row.orders,
+    })),
+    salesByDayOfWeek: salesByDayOfWeek.map((row) => ({
+      label: row.label,
+      revenue: formatMoney(row.revenue),
+      orders: row.orders,
+    })),
+    topProducts: dashboard.topProducts.map((row) => ({
+      product: row.product,
+      quantity: row.quantity,
+      revenue: formatMoney(row.revenue),
+    })),
     topOrders: dashboard.topOrders.map((order) => ({
       orderNumber: order.orderNumber,
       employee: order.employee,
       paidAt: order.paidAt.toISOString(),
-      total: order.total,
+      total: formatMoney(order.total),
     })),
-    salesByCategory: dashboard.salesByCategory,
-    paymentMix: dashboard.paymentMix,
+    salesByCategory: dashboard.salesByCategory.map((row) => ({
+      category: row.category,
+      quantity: row.quantity,
+      revenue: formatMoney(row.revenue),
+    })),
+    paymentMix: dashboard.paymentMix.map((row) => ({
+      method: row.method,
+      amount: formatMoney(row.amount),
+      count: row.count,
+    })),
     productVelocity: dashboard.productVelocity,
+    salesByEmployee: salesByEmployee.map((row) => ({
+      employee: row.employee,
+      orderCount: row.orderCount,
+      revenue: formatMoney(row.revenue),
+    })),
+    salesByFulfillment: salesByFulfillment.map((row) => ({
+      label: row.label,
+      orderCount: row.orderCount,
+      revenue: formatMoney(row.revenue),
+    })),
+    itemsSold: dashboard.itemsSold,
+    dataNotes:
+      dashboard.productVelocity.length === 0
+        ? "No paid orders in this filter range."
+        : undefined,
     privacy:
       "This context contains aggregate cafe metrics only. It intentionally excludes customer emails, phone numbers, and customer names.",
   };
 }
 
 async function getFilterLabels(filters: ReportRange | ReportFilters) {
-  if (!("employeeId" in filters || "sessionId" in filters || "productId" in filters)) {
-    return {
-      employee: "All employees",
-      session: "All sessions",
-      product: "All products",
-    };
-  }
-
   const [employee, session, product] = await Promise.all([
-    filters.employeeId
+    "employeeId" in filters && filters.employeeId
       ? db.query.users.findFirst({ where: eq(users.id, filters.employeeId) })
       : null,
-    filters.sessionId
+    "sessionId" in filters && filters.sessionId
       ? db.query.posSessions.findFirst({
           where: eq(posSessions.id, filters.sessionId),
           with: { openedByUser: true },
         })
       : null,
-    filters.productId
+    "productId" in filters && filters.productId
       ? db.query.products.findFirst({ where: eq(products.id, filters.productId) })
       : null,
   ]);
