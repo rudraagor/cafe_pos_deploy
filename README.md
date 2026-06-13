@@ -14,7 +14,7 @@ This interactive matrix tracks our full-stack compliance against the official re
 - [ ] **[2.8] Session Lifecycle** — Logs cash drawer balances, shift starts, and final closing sales summary.
 - [ ] **[2.9] Analytics Dashboard** — Real-time charts, metrics filtering, and PDF/XLS report export.
 
-### 💻 2. POS Terminal (Cashier Interface)
+### 💻 2. POS Terminal 
 - [ ] **[3.1] Navigation Header** — Live search, current table indicator, and quick-menu navigation dropdown.
 - [ ] **[3.2] Floor Pop-up Grid** — Displays real-time occupied vs. free table cards with seat counts.
 - [ ] **[3.3] Order View & Cart** — Product grid filtering, item lines with line-level discounts, and Send-to-Kitchen action.
