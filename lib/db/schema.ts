@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   boolean,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -237,6 +238,18 @@ export const payments = pgTable("payments", {
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   changeDue: numeric("change_due", { precision: 10, scale: 2 }),
   reference: text("reference"),
+  ...timestamps,
+});
+
+// ---------------------------------------------------------------------------
+// AI report cache
+// ---------------------------------------------------------------------------
+export const aiReports = pgTable("ai_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull(),
+  rangeStart: timestamp("range_start", { withTimezone: true }).notNull(),
+  rangeEnd: timestamp("range_end", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
   ...timestamps,
 });
 

@@ -202,25 +202,19 @@ export async function getProductsByIds(ids: string[]) {
   });
 }
 
-export async function generateOrderNumber(
-  sessionId: string,
-  tx: DbClient = db,
-) {
+/** Next order number for today. Globally unique (not per-session). */
+export async function generateOrderNumber(tx: DbClient = db) {
   const today = new Date();
   const datePart = today.toISOString().slice(0, 10).replace(/-/g, "");
   const prefix = `ORD-${datePart}-`;
+  const suffixStart = prefix.length + 1;
 
   const [row] = await tx
     .select({
-      maxSuffix: sql<number | null>`max(nullif(substring(${orders.orderNumber} from ${prefix.length + 1}), '')::int)`,
+      maxSuffix: sql<number | null>`max(nullif(substring(${orders.orderNumber} from ${sql.raw(String(suffixStart))}), '')::int)`,
     })
     .from(orders)
-    .where(
-      and(
-        eq(orders.sessionId, sessionId),
-        sql`${orders.orderNumber} like ${prefix + "%"}`,
-      ),
-    );
+    .where(sql`${orders.orderNumber} like ${prefix + "%"}`);
 
   const next = (row?.maxSuffix ?? 0) + 1;
   return `${prefix}${String(next).padStart(4, "0")}`;

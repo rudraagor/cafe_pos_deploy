@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { adminNav } from "@/lib/nav";
 
-export function PosHamburgerMenu() {
+export function PosHamburgerMenu({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -42,19 +42,23 @@ export function PosHamburgerMenu() {
         <Menu className="size-5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Manage</DropdownMenuLabel>
-          {adminNav.map((item) => (
-            <DropdownMenuItem
-              key={item.href}
-              onClick={() => router.push(item.href)}
-            >
-              <item.icon className="size-4" />
-              {item.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
+        {isAdmin ? (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Manage</DropdownMenuLabel>
+              {adminNav.map((item) => (
+                <DropdownMenuItem
+                  key={item.href}
+                  onClick={() => router.push(item.href)}
+                >
+                  <item.icon className="size-4" />
+                  {item.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem onClick={handleCloseSession} disabled={isPending}>
           Close session
         </DropdownMenuItem>

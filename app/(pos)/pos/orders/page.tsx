@@ -22,6 +22,7 @@ export default async function PosOrdersPage() {
           customerName: o.customer?.name ?? null,
           total: o.total,
           status: o.status,
+          kdsStage: o.kdsStage,
           tableNumber: o.table?.number ?? null,
         }))}
       />

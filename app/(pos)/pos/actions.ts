@@ -237,6 +237,7 @@ export async function sendToKitchen(
   let lastCreateError: unknown = null;
   const attempts = orderId ? 1 : 3;
 
+  try {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       savedOrderId = await db.transaction(async (tx) => {
@@ -260,7 +261,7 @@ export async function sendToKitchen(
           return orderId;
         }
 
-        const orderNumber = await generateOrderNumber(session.id, tx);
+        const orderNumber = await generateOrderNumber(tx);
         const [created] = await tx
           .insert(orders)
           .values({ ...orderValues, kdsStage: "to_cook", orderNumber })
@@ -272,16 +273,34 @@ export async function sendToKitchen(
     } catch (error) {
       lastCreateError = error;
       if (orderId || !isUniqueViolation(error)) {
-        throw error;
+        return {
+          ok: false,
+          error: actionErrorMessage(
+            error,
+            "Could not save the order. Please try again.",
+          ),
+        };
       }
     }
+  }
+  } catch (error) {
+    return {
+      ok: false,
+      error: actionErrorMessage(
+        error,
+        "Could not save the order. Please try again.",
+      ),
+    };
   }
 
   if (!savedOrderId) {
     if (lastCreateError && !orderId) {
       return {
         ok: false,
-        error: "Could not generate a unique order number. Please try again.",
+        error: actionErrorMessage(
+          lastCreateError,
+          "Could not generate a unique order number. Please try again.",
+        ),
       };
     }
     return { ok: false, error: "Draft order not found." };
@@ -301,12 +320,26 @@ export async function sendToKitchen(
 }
 
 function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
+  let current: unknown = error;
+  while (current && typeof current === "object") {
+    if ("code" in current && current.code === "23505") return true;
+    if ("cause" in current) {
+      current = current.cause;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+
+function actionErrorMessage(error: unknown, fallback: string) {
+  if (isUniqueViolation(error)) {
+    return "Could not generate a unique order number. Please try again.";
+  }
+  if (error instanceof Error && error.message.startsWith("Failed query:")) {
+    return fallback;
+  }
+  return fallback;
 }
 
 export async function deleteDraftOrder(id: string): Promise<ActionResult> {
@@ -477,7 +510,9 @@ export async function resendReceipt(
 
 export type CustomerActionResult = ActionResult<
   keyof import("@/lib/validations/customers").CustomerInput
->;
+> & {
+  customer?: { id: string; name: string; email: string | null };
+};
 
 export async function createCustomer(
   formData: FormData,
@@ -498,10 +533,23 @@ export async function createCustomer(
     };
   }
 
-  await db.insert(customers).values(parsed.data);
-  revalidatePath("/pos/customers");
+  const [created] = await db
+    .insert(customers)
+    .values(parsed.data)
+    .returning({
+      id: customers.id,
+      name: customers.name,
+      email: customers.email,
+    });
 
-  return { ok: true, message: "Customer created." };
+  revalidatePath("/pos/customers");
+  revalidatePath("/pos");
+
+  return {
+    ok: true,
+    message: "Customer created.",
+    customer: created,
+  };
 }
 
 export async function updateCustomer(

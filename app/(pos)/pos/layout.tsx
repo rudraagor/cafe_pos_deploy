@@ -64,7 +64,7 @@ export default async function PosLayout({
             {user?.name}
           </span>
           <UserCircle2 className="size-7 text-muted-foreground" />
-          <PosHamburgerMenu />
+          <PosHamburgerMenu isAdmin={user?.role === "admin"} />
         </div>
       </header>
 

@@ -1,9 +1,16 @@
 import { EventEmitter } from "node:events";
 
 export const KDS_CHANGED_EVENT = "kds:changed";
+export const REPORTS_CHANGED_EVENT = "reports:changed";
 
 export type KdsChangedPayload = {
   orderId?: string;
+  at: string;
+};
+
+export type ReportsChangedPayload = {
+  orderId?: string;
+  sessionId?: string;
   at: string;
 };
 

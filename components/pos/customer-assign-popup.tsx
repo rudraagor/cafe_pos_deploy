@@ -61,6 +61,18 @@ export function CustomerAssignPopup({
         toast.error(result.error);
         return;
       }
+      if (result.customer) {
+        setCustomer(tableId, {
+          id: result.customer.id,
+          name: result.customer.name,
+        });
+        toast.success(`${result.customer.name} created and assigned.`);
+        onOpenChange(false);
+        setShowCreate(false);
+        setNewName("");
+        router.refresh();
+        return;
+      }
       toast.success("Customer created. Refresh to see in list.");
       router.refresh();
       setShowCreate(false);
