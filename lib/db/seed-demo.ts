@@ -1,11 +1,11 @@
-import { config } from "dotenv";
+import { loadLocalEnv } from "@/lib/db/load-env";
+import { createPgPool } from "@/lib/db/connection";
 
-config({ path: ".env.local" });
+loadLocalEnv();
 
 import bcrypt from "bcryptjs";
 import { and, count, eq, like, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
 import * as schema from "./schema";
 import {
   DEMO_CUSTOMER_EMAIL_DOMAIN,
@@ -332,7 +332,7 @@ function printCheatSheet() {
 }
 
 async function main() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = createPgPool();
   const db = drizzle(pool, { schema });
 
   console.log("Demo seed starting...");
