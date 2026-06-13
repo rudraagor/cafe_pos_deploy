@@ -1,0 +1,21 @@
+import { z } from "zod";
+
+export const cartItemSchema = z.object({
+  productId: z.string().uuid(),
+  name: z.string().min(1),
+  unitPrice: z.number().positive(),
+  taxRate: z.number().min(0).max(100),
+  qty: z.number().int().positive(),
+  isKitchenItem: z.boolean(),
+  categoryColor: z.string().optional(),
+});
+
+export const sendToKitchenSchema = z.object({
+  tableId: z.string().uuid(),
+  orderId: z.string().uuid().optional(),
+  items: z.array(cartItemSchema).min(1, "Add at least one product."),
+  couponCode: z.string().trim().optional(),
+  customerId: z.string().uuid().optional(),
+});
+
+export type SendToKitchenInput = z.infer<typeof sendToKitchenSchema>;

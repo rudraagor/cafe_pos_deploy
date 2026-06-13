@@ -1,8 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { Menu } from "lucide-react";
+import { toast } from "sonner";
 import { logout } from "@/app/(auth)/actions";
+import { closeSession } from "@/app/(pos)/pos/actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +19,19 @@ import { adminNav } from "@/lib/nav";
 
 export function PosHamburgerMenu() {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function handleCloseSession() {
+    startTransition(async () => {
+      const result = await closeSession();
+      if (result.ok) {
+        toast.success(result.message ?? "Session closed.");
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
 
   return (
     <DropdownMenu>
@@ -39,6 +55,9 @@ export function PosHamburgerMenu() {
           ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleCloseSession} disabled={isPending}>
+          Close session
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => logout()}>Log out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

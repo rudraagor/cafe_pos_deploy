@@ -1,14 +1,89 @@
-import { CupSoda } from "lucide-react";
+import { requireUser } from "@/lib/auth";
+import {
+  getActiveCategories,
+  getActiveProducts,
+  getActivePromotions,
+  getCustomers,
+  getFloorsWithTables,
+  getOccupiedTableIds,
+} from "@/lib/pos/queries";
+import { SessionScreen } from "@/components/pos/session-screen";
+import { CartStoreHydration } from "@/components/pos/cart-store-hydration";
+import { OrderView } from "@/components/pos/order-view";
+import { getLastClosedSession, getOpenSessionForUser } from "@/lib/pos/session";
 
-export default function PosOrderPage() {
+type PosPageProps = {
+  searchParams: Promise<{ table?: string }>;
+};
+
+export default async function PosOrderPage({ searchParams }: PosPageProps) {
+  const user = await requireUser();
+  const { table: tableId } = await searchParams;
+
+  const openSession = await getOpenSessionForUser(user.id);
+  if (!openSession) {
+    const lastClosed = await getLastClosedSession(user.id);
+    return (
+      <SessionScreen
+        lastClosedAt={lastClosed?.closedAt?.toISOString() ?? null}
+        lastClosingAmount={
+          lastClosed?.closingAmount
+            ? Number(lastClosed.closingAmount)
+            : null
+        }
+      />
+    );
+  }
+
+  const [
+    products,
+    categories,
+    promotions,
+    customers,
+    floors,
+    occupiedSet,
+  ] = await Promise.all([
+    getActiveProducts(),
+    getActiveCategories(),
+    getActivePromotions(),
+    getCustomers(),
+    getFloorsWithTables(),
+    getOccupiedTableIds(openSession.id),
+  ]);
+
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-3 p-6 text-center">
-      <CupSoda className="size-10 text-muted-foreground" />
-      <h1 className="text-xl font-semibold">POS Terminal</h1>
-      <p className="max-w-md text-sm text-muted-foreground">
-        The floor pop-up and order view are built in the next milestone. The
-        foundation (auth, database, and navigation) is in place.
-      </p>
-    </div>
+    <>
+      <CartStoreHydration />
+      <OrderView
+      tableId={tableId ?? null}
+      products={products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        taxRate: p.taxRate,
+        isKitchenItem: p.isKitchenItem,
+        categoryId: p.categoryId,
+        categoryName: p.categoryName,
+        categoryColor: p.categoryColor,
+      }))}
+      categories={categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        color: c.color,
+      }))}
+      promotions={promotions}
+      customers={customers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+      }))}
+      floors={floors.map((f) => ({
+        id: f.id,
+        name: f.name,
+        tables: f.tables,
+      }))}
+      occupiedTableIds={[...occupiedSet]}
+    />
+    </>
   );
 }

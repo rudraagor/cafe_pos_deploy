@@ -1,8 +1,27 @@
 import { Search, UserCircle2 } from "lucide-react";
 import { NavLink } from "@/components/nav-link";
+import { CurrentTableIndicator } from "@/components/pos/current-table-indicator";
 import { PosHamburgerMenu } from "@/components/pos-hamburger-menu";
 import { getCurrentUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { floors, tables } from "@/lib/db/schema";
 import { posNav } from "@/lib/nav";
+import { eq } from "drizzle-orm";
+
+async function getTableMap() {
+  const rows = await db
+    .select({
+      id: tables.id,
+      number: tables.number,
+      floorName: floors.name,
+    })
+    .from(tables)
+    .innerJoin(floors, eq(tables.floorId, floors.id));
+
+  return Object.fromEntries(
+    rows.map((r) => [r.id, { number: r.number, floorName: r.floorName }]),
+  );
+}
 
 export default async function PosLayout({
   children,
@@ -10,6 +29,7 @@ export default async function PosLayout({
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
+  const tableMap = await getTableMap();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -39,9 +59,7 @@ export default async function PosLayout({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden rounded-md border px-2.5 py-1 text-xs font-medium text-muted-foreground sm:inline">
-            No table
-          </span>
+          <CurrentTableIndicator tables={tableMap} />
           <span className="hidden text-sm font-medium sm:inline">
             {user?.name}
           </span>
