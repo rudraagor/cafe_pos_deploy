@@ -135,7 +135,16 @@ export async function closeSession(): Promise<CloseSessionResult> {
 export async function validateCoupon(
   code: string,
 ): Promise<
-  | { ok: true; coupon: { id: string; code: string; discountType: string; value: number } }
+  | {
+      ok: true;
+      coupon: {
+        id: string;
+        code: string;
+        discountType: string;
+        value: number;
+        stackable: boolean;
+      };
+    }
   | { ok: false; error: string }
 > {
   await requireUser();
@@ -152,6 +161,7 @@ export async function validateCoupon(
       code: coupon.code,
       discountType: coupon.discountType,
       value: Number(coupon.value),
+      stackable: coupon.stackable,
     },
   };
 }
@@ -205,6 +215,7 @@ export async function sendToKitchen(
       taxRate: Number(product.taxRate),
       qty: item.qty,
       isKitchenItem: product.isKitchenItem,
+      categoryId: product.categoryId,
       modifiers: normalizeModifiers(item.modifiers),
       note: item.note?.trim() || undefined,
       supportedModifiers: normalizeModifiers(product.supportedModifiers),
@@ -248,6 +259,7 @@ export async function sendToKitchen(
       code: row.code,
       discountType: row.discountType as "percent" | "fixed",
       value: Number(row.value),
+      stackable: row.stackable,
     };
   }
 

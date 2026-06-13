@@ -9,6 +9,7 @@ function espressoLine(qty: number) {
     taxRate: 5,
     qty,
     isKitchenItem: true,
+    categoryId: "cat-coffee",
     categoryColor: "#7c3aed",
   };
 }
@@ -113,5 +114,94 @@ const unmetPromotions = computeOrder([espressoLine(1)], {
 assert.equal(unmetPromotions.discountTotal, 0);
 assert.equal(unmetPromotions.orderDiscounts.length, 0);
 assert.equal(unmetPromotions.total, 126);
+
+const exclusiveCoupon = computeOrder([espressoLine(3)], {
+  promotions: [
+    {
+      id: "promo-exclusive-suppressed",
+      name: "Bulk Coffee",
+      scope: "product",
+      productId: "p1",
+      minQuantity: 2,
+      minOrderAmount: null,
+      discountType: "percent",
+      value: 10,
+    },
+  ],
+  coupon: {
+    id: "c-exclusive",
+    code: "ONLYME",
+    discountType: "percent",
+    value: 10,
+    stackable: false,
+  },
+});
+
+assert.equal(exclusiveCoupon.lines[0].lineDiscount, 0);
+assert.equal(exclusiveCoupon.discountTotal, 36);
+assert.equal(exclusiveCoupon.total, 342);
+assert.equal(exclusiveCoupon.appliedCoupon?.code, "ONLYME");
+
+const comboReward = computeOrder(
+  [
+    espressoLine(2),
+    {
+      productId: "p2",
+      name: "Brownie",
+      unitPrice: 100,
+      taxRate: 0,
+      qty: 1,
+      isKitchenItem: true,
+    },
+  ],
+  {
+    promotions: [
+      {
+        id: "combo1",
+        name: "Coffee pair gets brownie",
+        scope: "product",
+        productId: null,
+        minQuantity: null,
+        minOrderAmount: null,
+        discountType: "percent",
+        value: 100,
+        ruleType: "combo",
+        ruleConfig: {
+          requiredProductIds: ["p1"],
+          requiredQuantity: 2,
+          rewardProductId: "p2",
+          rewardQuantity: 1,
+        },
+      },
+    ],
+  },
+);
+
+assert.equal(comboReward.lines[1].lineDiscount, 100);
+assert.equal(comboReward.discountTotal, 100);
+assert.equal(comboReward.total, 252);
+
+const dailyCategory = computeOrder([espressoLine(1)], {
+  promotions: [
+    {
+      id: "daily1",
+      name: "Coffee happy hour",
+      scope: "product",
+      productId: null,
+      minQuantity: null,
+      minOrderAmount: null,
+      discountType: "fixed",
+      value: 20,
+      ruleType: "daily_item",
+      ruleConfig: {
+        dailyCategoryIds: ["cat-coffee"],
+      },
+    },
+  ],
+});
+
+assert.equal(dailyCategory.lines[0].lineDiscount, 20);
+assert.equal(dailyCategory.discountTotal, 20);
+assert.equal(dailyCategory.total, 105);
 
 console.log("pricing tests passed");

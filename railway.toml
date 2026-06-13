@@ -1,8 +1,0 @@
-[build]
-buildCommand = "pnpm db:migrate && pnpm build"
-
-[deploy]
-startCommand = "pnpm start"
-healthcheckPath = "/login"
-healthcheckTimeout = 300
-numReplicas = 1

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   customers,
@@ -15,11 +15,21 @@ function paidOrdersWhere(filters: ReportRange | ReportFilters) {
     gte(orders.updatedAt, filters.start),
     lt(orders.updatedAt, filters.end),
   ];
-  if ("employeeId" in filters && filters.employeeId) {
-    conditions.push(eq(orders.employeeId, filters.employeeId));
+  if ("employeeIds" in filters && filters.employeeIds.length > 0) {
+    conditions.push(inArray(orders.employeeId, filters.employeeIds));
   }
-  if ("sessionId" in filters && filters.sessionId) {
-    conditions.push(eq(orders.sessionId, filters.sessionId));
+  if ("sessionIds" in filters && filters.sessionIds.length > 0) {
+    conditions.push(inArray(orders.sessionId, filters.sessionIds));
+  }
+  if ("productIds" in filters && filters.productIds.length > 0) {
+    conditions.push(sql`exists (
+      select 1 from order_items report_product_filter
+      where report_product_filter.order_id = orders.id
+        and report_product_filter.product_id in (${sql.join(
+          filters.productIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+    )`);
   }
   return and(...conditions);
 }

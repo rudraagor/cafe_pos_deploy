@@ -42,10 +42,26 @@ type DiscountsManagementProps = {
   coupons: CouponRow[];
   promotions: PromotionRow[];
   products: PromotionProductOption[];
+  categories: PromotionProductOption[];
 };
 
 function discountLabel(type: "percent" | "fixed", value: string) {
   return type === "percent" ? `${value}%` : `₹${Number(value).toFixed(2)}`;
+}
+
+function ruleLabel(promotion: PromotionRow) {
+  if (promotion.ruleType === "order_threshold") {
+    return `Order ₹${Number(promotion.minOrderAmount).toFixed(2)}`;
+  }
+  if (promotion.ruleType === "product_quantity") {
+    return `${promotion.productName ?? "Product"} x${promotion.minQuantity}`;
+  }
+  if (promotion.ruleType === "combo") {
+    return promotion.rewardProductIds.length > 0
+      ? `Combo -> free/discounted reward`
+      : `Combo discount`;
+  }
+  return `Dish of the day`;
 }
 
 function TabButton({
@@ -79,6 +95,7 @@ export function DiscountsManagement({
   coupons,
   promotions,
   products,
+  categories,
 }: DiscountsManagementProps) {
   const [activeTab, setActiveTab] = useState<"coupons" | "promotions">(
     "coupons",
@@ -108,7 +125,11 @@ export function DiscountsManagement({
       {activeTab === "coupons" ? (
         <CouponPanel coupons={coupons} />
       ) : (
-        <PromotionPanel promotions={promotions} products={products} />
+        <PromotionPanel
+          promotions={promotions}
+          products={products}
+          categories={categories}
+        />
       )}
     </div>
   );
@@ -146,6 +167,7 @@ function CouponPanel({ coupons }: { coupons: CouponRow[] }) {
           <TableRow>
             <TableHead>Code</TableHead>
             <TableHead>Discount</TableHead>
+            <TableHead>Stacking</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="w-28 text-right">Actions</TableHead>
           </TableRow>
@@ -158,6 +180,11 @@ function CouponPanel({ coupons }: { coupons: CouponRow[] }) {
               </TableCell>
               <TableCell>
                 {discountLabel(coupon.discountType, coupon.value)}
+              </TableCell>
+              <TableCell>
+                <Badge variant={coupon.stackable ? "outline" : "secondary"}>
+                  {coupon.stackable ? "Clubbed" : "Exclusive"}
+                </Badge>
               </TableCell>
               <TableCell>
                 <Badge variant={coupon.active ? "secondary" : "outline"}>
@@ -190,9 +217,11 @@ function CouponPanel({ coupons }: { coupons: CouponRow[] }) {
 function PromotionPanel({
   promotions,
   products,
+  categories,
 }: {
   promotions: PromotionRow[];
   products: PromotionProductOption[];
+  categories: PromotionProductOption[];
 }) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
@@ -218,6 +247,7 @@ function PromotionPanel({
         <PromotionFormDialog
           mode="create"
           products={products}
+          categories={categories}
           action={createPromotion}
         />
       }
@@ -237,6 +267,7 @@ function PromotionPanel({
             <TableHead>Name</TableHead>
             <TableHead>Trigger</TableHead>
             <TableHead>Discount</TableHead>
+            <TableHead>Stacking</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="w-28 text-right">Actions</TableHead>
           </TableRow>
@@ -245,13 +276,14 @@ function PromotionPanel({
           {filtered.map((promotion) => (
             <TableRow key={promotion.id}>
               <TableCell className="font-medium">{promotion.name}</TableCell>
-              <TableCell>
-                {promotion.scope === "product"
-                  ? `${promotion.productName ?? "Product"} x${promotion.minQuantity}`
-                  : `Order ₹${Number(promotion.minOrderAmount).toFixed(2)}`}
-              </TableCell>
+              <TableCell>{ruleLabel(promotion)}</TableCell>
               <TableCell>
                 {discountLabel(promotion.discountType, promotion.value)}
+              </TableCell>
+              <TableCell>
+                <Badge variant={promotion.stackable ? "outline" : "secondary"}>
+                  {promotion.stackable ? "Clubbed" : "Exclusive"}
+                </Badge>
               </TableCell>
               <TableCell>
                 <Badge variant={promotion.active ? "secondary" : "outline"}>
@@ -264,6 +296,7 @@ function PromotionPanel({
                     mode="edit"
                     promotion={promotion}
                     products={products}
+                    categories={categories}
                     action={updatePromotion.bind(null, promotion.id)}
                   />
                   <DeleteButton

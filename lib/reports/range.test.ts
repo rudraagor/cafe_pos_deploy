@@ -38,17 +38,17 @@ assert.equal(spanDays, 7);
 
 const filtered = parseReportFilters({
   preset: "today",
-  employeeId: "employee-1",
+  employeeId: ["employee-1", "employee-2"],
   sessionId: "session-1",
-  productId: "product-1",
+  productId: "product-1,product-2",
 });
 
-assert.equal(filtered.employeeId, "employee-1");
-assert.equal(filtered.sessionId, "session-1");
-assert.equal(filtered.productId, "product-1");
+assert.deepEqual(filtered.employeeIds, ["employee-1", "employee-2"]);
+assert.deepEqual(filtered.sessionIds, ["session-1"]);
+assert.deepEqual(filtered.productIds, ["product-1", "product-2"]);
 assert.equal(
   rangeToSearchParams(filtered),
-  "preset=today&employeeId=employee-1&sessionId=session-1&productId=product-1",
+  "preset=today&employeeId=employee-1&employeeId=employee-2&sessionId=session-1&productId=product-1&productId=product-2",
 );
 
 const cleaned = parseReportFilters({
@@ -58,8 +58,8 @@ const cleaned = parseReportFilters({
   productId: "   ",
 });
 
-assert.equal(cleaned.employeeId, undefined);
-assert.equal(cleaned.sessionId, undefined);
-assert.equal(cleaned.productId, undefined);
+assert.deepEqual(cleaned.employeeIds, []);
+assert.deepEqual(cleaned.sessionIds, []);
+assert.deepEqual(cleaned.productIds, []);
 
 console.log("report range tests passed");

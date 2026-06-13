@@ -93,6 +93,7 @@ export function DiscountPopup({
         id: result.coupon.id,
         discountType: result.coupon.discountType as "percent" | "fixed",
         value: result.coupon.value,
+        stackable: result.coupon.stackable,
       });
       toast.success(`Coupon ${result.coupon.code} applied.`);
       onOpenChange(false);

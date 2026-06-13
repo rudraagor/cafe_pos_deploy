@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FilterCombobox } from "@/components/reports/filter-combobox";
+import { MultiFilterSelect } from "@/components/reports/multi-filter-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,8 +41,10 @@ export function RangePicker({
     const end = String(formData.get("end") ?? "");
     const params = new URLSearchParams({ preset: "custom", start, end });
     for (const key of ["employeeId", "sessionId", "productId"]) {
-      const value = String(formData.get(key) ?? "");
-      if (value && value !== "all") params.set(key, value);
+      for (const value of formData.getAll(key)) {
+        const id = String(value).trim();
+        if (id) params.append(key, id);
+      }
     }
     router.push(`/admin/reports?${params.toString()}`);
   }
@@ -81,22 +83,25 @@ export function RangePicker({
             new Date(filters.end.getTime() - 86400000),
           )}
         />
-        <FilterCombobox
+        <MultiFilterSelect
           name="employeeId"
+          label="Employees"
           placeholder="All employees"
-          value={filters.employeeId}
+          values={filters.employeeIds}
           options={options.employees}
         />
-        <FilterCombobox
+        <MultiFilterSelect
           name="sessionId"
+          label="Sessions"
           placeholder="All sessions"
-          value={filters.sessionId}
+          values={filters.sessionIds}
           options={options.sessions}
         />
-        <FilterCombobox
+        <MultiFilterSelect
           name="productId"
+          label="Products"
           placeholder="All products"
-          value={filters.productId}
+          values={filters.productIds}
           options={options.products}
         />
         <Button type="submit" variant="outline">

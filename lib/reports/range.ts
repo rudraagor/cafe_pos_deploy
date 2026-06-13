@@ -7,18 +7,18 @@ export type ReportRange = {
 };
 
 export type ReportFilters = ReportRange & {
-  employeeId?: string;
-  sessionId?: string;
-  productId?: string;
+  employeeIds: string[];
+  sessionIds: string[];
+  productIds: string[];
 };
 
 export type ReportSearchParams = {
   preset?: string;
   start?: string;
   end?: string;
-  employeeId?: string;
-  sessionId?: string;
-  productId?: string;
+  employeeId?: string | string[];
+  sessionId?: string | string[];
+  productId?: string | string[];
 };
 
 export const rangePresets: { value: RangePreset; label: string }[] = [
@@ -70,9 +70,9 @@ export function parseReportFilters(
 ): ReportFilters {
   return {
     ...parseReportRange(searchParams),
-    employeeId: cleanFilterId(searchParams.employeeId),
-    sessionId: cleanFilterId(searchParams.sessionId),
-    productId: cleanFilterId(searchParams.productId),
+    employeeIds: cleanFilterIds(searchParams.employeeId),
+    sessionIds: cleanFilterIds(searchParams.sessionId),
+    productIds: cleanFilterIds(searchParams.productId),
   };
 }
 
@@ -82,16 +82,29 @@ export function rangeToSearchParams(range: ReportRange | ReportFilters) {
     params.set("start", formatDateInput(range.start));
     params.set("end", formatDateInput(addDays(range.end, -1)));
   }
-  if ("employeeId" in range && range.employeeId) {
-    params.set("employeeId", range.employeeId);
+  if ("employeeIds" in range) {
+    for (const id of range.employeeIds) params.append("employeeId", id);
   }
-  if ("sessionId" in range && range.sessionId) {
-    params.set("sessionId", range.sessionId);
+  if ("sessionIds" in range) {
+    for (const id of range.sessionIds) params.append("sessionId", id);
   }
-  if ("productId" in range && range.productId) {
-    params.set("productId", range.productId);
+  if ("productIds" in range) {
+    for (const id of range.productIds) params.append("productId", id);
   }
   return params.toString();
+}
+
+export function reportParamsFromUrlSearchParams(
+  searchParams: URLSearchParams,
+): ReportSearchParams {
+  return {
+    preset: searchParams.get("preset") ?? undefined,
+    start: searchParams.get("start") ?? undefined,
+    end: searchParams.get("end") ?? undefined,
+    employeeId: searchParams.getAll("employeeId"),
+    sessionId: searchParams.getAll("sessionId"),
+    productId: searchParams.getAll("productId"),
+  };
 }
 
 export function formatDateInput(date: Date) {
@@ -145,9 +158,16 @@ function isRangePreset(value: unknown): value is RangePreset {
   );
 }
 
-function cleanFilterId(value: string | undefined) {
-  const trimmed = value?.trim();
-  return trimmed && trimmed !== "all" ? trimmed : undefined;
+function cleanFilterIds(value: string | string[] | undefined) {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return [
+    ...new Set(
+      values
+        .flatMap((item) => item.split(","))
+        .map((item) => item.trim())
+        .filter((item) => item && item !== "all"),
+    ),
+  ];
 }
 
 function parseDateBoundary(value: string | undefined, side: "start" | "end") {

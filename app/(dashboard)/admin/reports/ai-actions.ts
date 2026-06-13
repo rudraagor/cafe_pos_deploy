@@ -237,9 +237,9 @@ async function cacheAiReport(
 function cacheKind(kind: string, filters: ReportFilters) {
   return [
     kind,
-    `employee:${filters.employeeId ?? "all"}`,
-    `session:${filters.sessionId ?? "all"}`,
-    `product:${filters.productId ?? "all"}`,
+    `employee:${filters.employeeIds.length ? [...filters.employeeIds].sort().join(",") : "all"}`,
+    `session:${filters.sessionIds.length ? [...filters.sessionIds].sort().join(",") : "all"}`,
+    `product:${filters.productIds.length ? [...filters.productIds].sort().join(",") : "all"}`,
   ].join("|");
 }
 

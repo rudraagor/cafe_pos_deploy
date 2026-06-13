@@ -14,6 +14,7 @@ export type TableCart = {
   couponId?: string;
   couponDiscountType?: "percent" | "fixed";
   couponValue?: number;
+  couponStackable?: boolean;
   customerId?: string;
   customerName?: string;
 };
@@ -35,6 +36,7 @@ type CartState = {
       id: string;
       discountType: "percent" | "fixed";
       value: number;
+      stackable?: boolean;
     } | null,
   ) => void;
   setCustomer: (
@@ -50,6 +52,7 @@ type CartState = {
       couponId?: string;
       couponDiscountType?: "percent" | "fixed";
       couponValue?: number;
+      couponStackable?: boolean;
       customerId?: string;
       customerName?: string;
     },
@@ -142,6 +145,7 @@ export const useCartStore = create<CartState>()(
                 couponId: coupon?.id,
                 couponDiscountType: coupon?.discountType,
                 couponValue: coupon?.value,
+                couponStackable: coupon?.stackable,
               },
             },
           };
@@ -180,6 +184,7 @@ export const useCartStore = create<CartState>()(
               couponId: draft.couponId,
               couponDiscountType: draft.couponDiscountType,
               couponValue: draft.couponValue,
+              couponStackable: draft.couponStackable,
               customerId: draft.customerId,
               customerName: draft.customerName,
             },

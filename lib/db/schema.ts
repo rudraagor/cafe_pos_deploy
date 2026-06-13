@@ -18,6 +18,12 @@ import {
 export const userRole = pgEnum("user_role", ["admin", "employee"]);
 export const discountType = pgEnum("discount_type", ["percent", "fixed"]);
 export const promoScope = pgEnum("promo_scope", ["product", "order"]);
+export const promotionRuleType = pgEnum("promotion_rule_type", [
+  "order_threshold",
+  "product_quantity",
+  "combo",
+  "daily_item",
+]);
 export const paymentType = pgEnum("payment_type", ["cash", "card", "upi"]);
 export const orderStatus = pgEnum("order_status", [
   "draft",
@@ -132,6 +138,7 @@ export const coupons = pgTable("coupons", {
   code: text("code").notNull().unique(),
   discountType: discountType("discount_type").notNull(),
   value: numeric("value", { precision: 10, scale: 2 }).notNull(),
+  stackable: boolean("stackable").notNull().default(true),
   active: boolean("active").notNull().default(true),
   ...timestamps,
 });
@@ -147,6 +154,12 @@ export const promotions = pgTable("promotions", {
   minOrderAmount: numeric("min_order_amount", { precision: 10, scale: 2 }),
   discountType: discountType("discount_type").notNull(),
   value: numeric("value", { precision: 10, scale: 2 }).notNull(),
+  stackable: boolean("stackable").notNull().default(true),
+  ruleType: promotionRuleType("rule_type").notNull().default("order_threshold"),
+  ruleConfig: jsonb("rule_config").notNull().default({}),
+  daysOfWeek: jsonb("days_of_week").notNull().default([]),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
   active: boolean("active").notNull().default(true),
   ...timestamps,
 });

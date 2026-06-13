@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   categories,
@@ -18,17 +18,20 @@ function paidOrdersWhere(filters: ReportRange | ReportFilters) {
     lt(orders.updatedAt, filters.end),
   ];
 
-  if ("employeeId" in filters && filters.employeeId) {
-    conditions.push(eq(orders.employeeId, filters.employeeId));
+  if ("employeeIds" in filters && filters.employeeIds.length > 0) {
+    conditions.push(inArray(orders.employeeId, filters.employeeIds));
   }
-  if ("sessionId" in filters && filters.sessionId) {
-    conditions.push(eq(orders.sessionId, filters.sessionId));
+  if ("sessionIds" in filters && filters.sessionIds.length > 0) {
+    conditions.push(inArray(orders.sessionId, filters.sessionIds));
   }
-  if ("productId" in filters && filters.productId) {
+  if ("productIds" in filters && filters.productIds.length > 0) {
     conditions.push(sql`exists (
-      select 1 from ${orderItems}
-      where ${orderItems.orderId} = ${orders.id}
-        and ${orderItems.productId} = ${filters.productId}
+      select 1 from order_items report_product_filter
+      where report_product_filter.order_id = orders.id
+        and report_product_filter.product_id in (${sql.join(
+          filters.productIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})
     )`);
   }
 
@@ -37,8 +40,8 @@ function paidOrdersWhere(filters: ReportRange | ReportFilters) {
 
 function paidLineItemsWhere(filters: ReportRange | ReportFilters) {
   const conditions = [paidOrdersWhere(filters)];
-  if ("productId" in filters && filters.productId) {
-    conditions.push(eq(orderItems.productId, filters.productId));
+  if ("productIds" in filters && filters.productIds.length > 0) {
+    conditions.push(inArray(orderItems.productId, filters.productIds));
   }
   return and(...conditions);
 }

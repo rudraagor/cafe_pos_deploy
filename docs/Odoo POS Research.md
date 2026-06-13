@@ -1,4 +1,5 @@
 # Odoo & Square POS Behavioral Workflows & Architectural Alignment
+
 ---
 
 ## 1. System-Wide Architectural Patterns
@@ -12,6 +13,7 @@ Every POS execution is bound to a secure lifecycle:
 Shift Start → Active Trading → Shift Closing Summary
 
 This ensures:
+
 - Full financial traceability
 - End-of-shift reconciliation
 - Tamper-resistant reporting
@@ -25,6 +27,7 @@ Order states:
 Draft → Sent to Kitchen → Preparing → Completed → Paid
 
 Rules:
+
 - Cashiers manage creation and checkout
 - Kitchen staff manage preparation states
 - Paid orders become locked (no edits allowed)
@@ -38,6 +41,7 @@ KDS workflow:
 To Cook → Preparing → Completed
 
 Features:
+
 - Item-level tracking
 - Parallel cooking workflows
 - Strikethrough completion UI behavior
@@ -62,6 +66,7 @@ Two isolated discount engines:
 - Automatic promotions (rules-based triggers)
 
 Prevents:
+
 - stacking conflicts
 - audit inconsistencies
 
@@ -77,6 +82,7 @@ Rule:
 Only send newly added items to kitchen — never resend existing ones.
 
 Behavior:
+
 - Track previously sent items
 - Send only deltas to KDS
 - Prevent duplicate kitchen tickets
@@ -93,6 +99,7 @@ Formula:
 Drawer Discrepancy = Physical Cash Input - System Expected Sales Revenue
 
 Behavior:
+
 - System calculates only after input
 - Flags discrepancies in admin dashboard
 
@@ -104,6 +111,7 @@ Rule:
 Prevent payment flow blocking due to gateway delays.
 
 Behavior:
+
 - 60-second QR countdown timer
 - Timeout → Transaction Timeout state
 - Allows retry or alternate gateway
@@ -116,6 +124,7 @@ Rule:
 Prevent accidental ticket clearing.
 
 Behavior:
+
 - “Recall Last Ticket” button
 - Restores last completed ticket
 - Moves it back to Preparing state
@@ -141,6 +150,8 @@ Extra Hot
 Less Ice  
 
 Behavior:
+
 - Attach modifiers to items
 - Send to KDS
 - Print under item name
+

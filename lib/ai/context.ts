@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { posSessions, products, users } from "@/lib/db/schema";
 import {
@@ -112,26 +112,42 @@ export async function buildReportAiContext(filters: ReportRange | ReportFilters)
 }
 
 async function getFilterLabels(filters: ReportRange | ReportFilters) {
-  const [employee, session, product] = await Promise.all([
-    "employeeId" in filters && filters.employeeId
-      ? db.query.users.findFirst({ where: eq(users.id, filters.employeeId) })
-      : null,
-    "sessionId" in filters && filters.sessionId
-      ? db.query.posSessions.findFirst({
-          where: eq(posSessions.id, filters.sessionId),
+  const [employees, sessions, productRows] = await Promise.all([
+    "employeeIds" in filters && filters.employeeIds.length > 0
+      ? db.query.users.findMany({
+          where: inArray(users.id, filters.employeeIds),
+        })
+      : [],
+    "sessionIds" in filters && filters.sessionIds.length > 0
+      ? db.query.posSessions.findMany({
+          where: inArray(posSessions.id, filters.sessionIds),
           with: { openedByUser: true },
         })
-      : null,
-    "productId" in filters && filters.productId
-      ? db.query.products.findFirst({ where: eq(products.id, filters.productId) })
-      : null,
+      : [],
+    "productIds" in filters && filters.productIds.length > 0
+      ? db.query.products.findMany({
+          where: inArray(products.id, filters.productIds),
+        })
+      : [],
   ]);
 
   return {
-    employee: employee?.name ?? "All employees",
-    session: session
-      ? `${session.openedAt.toISOString()} (${session.openedByUser?.name ?? "Unknown"})`
-      : "All sessions",
-    product: product?.name ?? "All products",
+    employee:
+      employees.length > 0
+        ? employees.map((employee) => employee.name).join(", ")
+        : "All employees",
+    session:
+      sessions.length > 0
+        ? sessions
+            .map(
+              (session) =>
+                `${session.openedAt.toISOString()} (${session.openedByUser?.name ?? "Unknown"})`,
+            )
+            .join(", ")
+        : "All sessions",
+    product:
+      productRows.length > 0
+        ? productRows.map((product) => product.name).join(", ")
+        : "All products",
   };
 }

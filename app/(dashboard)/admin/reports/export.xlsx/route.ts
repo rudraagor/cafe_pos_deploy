@@ -1,21 +1,19 @@
 import ExcelJS from "exceljs";
 import { requireRole } from "@/lib/auth";
 import { getDashboardCsvRows } from "@/lib/reports/queries";
-import { parseReportFilters } from "@/lib/reports/range";
+import {
+  parseReportFilters,
+  reportParamsFromUrlSearchParams,
+} from "@/lib/reports/range";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   await requireRole("admin");
   const url = new URL(request.url);
-  const filters = parseReportFilters({
-    preset: url.searchParams.get("preset") ?? undefined,
-    start: url.searchParams.get("start") ?? undefined,
-    end: url.searchParams.get("end") ?? undefined,
-    employeeId: url.searchParams.get("employeeId") ?? undefined,
-    sessionId: url.searchParams.get("sessionId") ?? undefined,
-    productId: url.searchParams.get("productId") ?? undefined,
-  });
+  const filters = parseReportFilters(
+    reportParamsFromUrlSearchParams(url.searchParams),
+  );
   const rows = await getDashboardCsvRows(filters);
   const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
 

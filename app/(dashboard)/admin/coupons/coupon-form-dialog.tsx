@@ -24,6 +24,7 @@ export type CouponFormValue = {
   code: string;
   discountType: "percent" | "fixed";
   value: string;
+  stackable: boolean;
   active: boolean;
 };
 
@@ -39,6 +40,7 @@ function defaultCoupon(coupon?: CouponFormValue): CouponFormValue {
       code: "",
       discountType: "percent",
       value: "10",
+      stackable: true,
       active: true,
     }
   );
@@ -182,6 +184,22 @@ export function CouponFormDialog({
             <Switch
               checked={values.active}
               onChange={(event) => updateValue("active", event.target.checked)}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <span>
+              <span className="block text-sm font-medium">
+                Can be clubbed
+              </span>
+              <span className="text-muted-foreground block text-xs">
+                Allow this coupon with automatic promotions.
+              </span>
+            </span>
+            <Switch
+              checked={values.stackable}
+              onChange={(event) =>
+                updateValue("stackable", event.target.checked)
+              }
             />
           </label>
           {serverError ? (

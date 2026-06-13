@@ -30,12 +30,14 @@ export function CartPanel({ tableId, promotions }: CartPanelProps) {
       code: cart.couponCode,
       discountType: cart.couponDiscountType ?? ("percent" as const),
       value: cart.couponValue,
+      stackable: cart.couponStackable,
     };
   }, [
     cart.couponCode,
     cart.couponId,
     cart.couponDiscountType,
     cart.couponValue,
+    cart.couponStackable,
   ]);
 
   const computed = useMemo(
@@ -147,12 +149,14 @@ export function useCartPricing(
       code: cart.couponCode,
       discountType: cart.couponDiscountType ?? ("percent" as const),
       value: cart.couponValue,
+      stackable: cart.couponStackable,
     };
   }, [
     cart.couponCode,
     cart.couponId,
     cart.couponDiscountType,
     cart.couponValue,
+    cart.couponStackable,
   ]);
 
   return useMemo(

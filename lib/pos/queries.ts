@@ -83,7 +83,44 @@ export async function getActivePromotions(): Promise<PromotionInput[]> {
     minOrderAmount: row.minOrderAmount ? Number(row.minOrderAmount) : null,
     discountType: row.discountType,
     value: Number(row.value),
+    stackable: row.stackable,
+    ruleType: row.ruleType,
+    ruleConfig: normalizePromotionConfig(row.ruleConfig),
+    daysOfWeek: Array.isArray(row.daysOfWeek)
+      ? row.daysOfWeek.map(Number)
+      : [],
+    startTime: row.startTime,
+    endTime: row.endTime,
   }));
+}
+
+function normalizePromotionConfig(value: unknown): PromotionInput["ruleConfig"] {
+  if (!value || typeof value !== "object") return {};
+  const config = value as Record<string, unknown>;
+  return {
+    requiredProductIds: Array.isArray(config.requiredProductIds)
+      ? config.requiredProductIds.map(String)
+      : [],
+    dailyProductIds: Array.isArray(config.dailyProductIds)
+      ? config.dailyProductIds.map(String)
+      : [],
+    dailyCategoryIds: Array.isArray(config.dailyCategoryIds)
+      ? config.dailyCategoryIds.map(String)
+      : [],
+    requiredQuantity:
+      typeof config.requiredQuantity === "number"
+        ? config.requiredQuantity
+        : Number(config.requiredQuantity ?? 1),
+    rewardProductIds: Array.isArray(config.rewardProductIds)
+      ? config.rewardProductIds.map(String)
+      : config.rewardProductId
+        ? [String(config.rewardProductId)]
+        : [],
+    rewardQuantity:
+      typeof config.rewardQuantity === "number"
+        ? config.rewardQuantity
+        : Number(config.rewardQuantity ?? 1),
+  };
 }
 
 export async function getFloorsWithTables() {

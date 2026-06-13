@@ -21,11 +21,23 @@ function blankToNull(value: FormDataEntryValue | null) {
   return text || null;
 }
 
+function formDataStrings(formData: FormData, key: string) {
+  return formData
+    .getAll(key)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function formDataNumbers(formData: FormData, key: string) {
+  return formDataStrings(formData, key).map(Number);
+}
+
 function parseCoupon(formData: FormData): CouponActionResult | CouponInput {
   const parsed = couponSchema.safeParse({
     code: formData.get("code"),
     discountType: formData.get("discountType"),
     value: formData.get("value"),
+    stackable: formData.get("stackable") === "true",
     active: formData.get("active") === "true",
   });
 
@@ -46,11 +58,22 @@ function parsePromotion(
   const parsed = promotionSchema.safeParse({
     name: formData.get("name"),
     scope: formData.get("scope"),
+    ruleType: formData.get("ruleType"),
     productId: blankToNull(formData.get("productId")),
     minQuantity: blankToNull(formData.get("minQuantity")),
     minOrderAmount: blankToNull(formData.get("minOrderAmount")),
+    requiredProductIds: formDataStrings(formData, "requiredProductIds"),
+    dailyProductIds: formDataStrings(formData, "dailyProductIds"),
+    dailyCategoryIds: formDataStrings(formData, "dailyCategoryIds"),
+    requiredQuantity: formData.get("requiredQuantity") ?? "1",
+    rewardProductIds: formDataStrings(formData, "rewardProductIds"),
+    rewardQuantity: formData.get("rewardQuantity") ?? "1",
+    daysOfWeek: formDataNumbers(formData, "daysOfWeek"),
+    startTime: blankToNull(formData.get("startTime")),
+    endTime: blankToNull(formData.get("endTime")),
     discountType: formData.get("discountType"),
     value: formData.get("value"),
+    stackable: formData.get("stackable") === "true",
     active: formData.get("active") === "true",
   });
 
@@ -88,20 +111,41 @@ function couponValues(input: CouponInput) {
     code: input.code,
     discountType: input.discountType,
     value: input.value.toFixed(2),
+    stackable: input.stackable,
     active: input.active,
   };
 }
 
 function promotionValues(input: PromotionInput) {
+  const scope: "order" | "product" =
+    input.ruleType === "order_threshold" ? "order" : "product";
+  const ruleConfig = {
+    requiredProductIds: input.requiredProductIds,
+    dailyProductIds: input.dailyProductIds,
+    dailyCategoryIds: input.dailyCategoryIds,
+    requiredQuantity: input.requiredQuantity,
+    rewardProductIds: input.rewardProductIds,
+    rewardQuantity: input.rewardQuantity,
+  };
+
   return {
     name: input.name,
-    scope: input.scope,
-    productId: input.scope === "product" ? input.productId : null,
-    minQuantity: input.scope === "product" ? input.minQuantity : null,
+    scope,
+    productId: input.ruleType === "product_quantity" ? input.productId : null,
+    minQuantity:
+      input.ruleType === "product_quantity" ? input.minQuantity : null,
     minOrderAmount:
-      input.scope === "order" ? input.minOrderAmount?.toFixed(2) : null,
+      input.ruleType === "order_threshold"
+        ? (input.minOrderAmount?.toFixed(2) ?? null)
+        : null,
     discountType: input.discountType,
     value: input.value.toFixed(2),
+    stackable: input.stackable,
+    ruleType: input.ruleType,
+    ruleConfig,
+    daysOfWeek: input.daysOfWeek,
+    startTime: input.startTime || null,
+    endTime: input.endTime || null,
     active: input.active,
   };
 }

@@ -99,6 +99,7 @@ export function ProductGrid({
       unitPrice: Number(product.price),
       taxRate: Number(product.taxRate),
       isKitchenItem: product.isKitchenItem,
+      categoryId: product.categoryId,
       categoryColor: color,
       modifiers,
       note: itemNote.trim() || undefined,

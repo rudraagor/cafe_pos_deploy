@@ -36,6 +36,7 @@ export function OrderSummary({
   const router = useRouter();
   const cart = useTableCart(tableId);
   const clearTable = useCartStore((s) => s.clearTable);
+  const setCoupon = useCartStore((s) => s.setCoupon);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -117,9 +118,22 @@ export function OrderSummary({
           </p>
         ) : null}
         {cart.couponCode ? (
-          <p className="text-muted-foreground text-xs">
-            Coupon: <span className="text-foreground">{cart.couponCode}</span>
-          </p>
+          <div className="text-muted-foreground flex items-center justify-between gap-2 text-xs">
+            <span>
+              Coupon: <span className="text-foreground">{cart.couponCode}</span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setCoupon(tableId, null);
+                toast.success("Coupon removed.");
+              }}
+            >
+              Remove
+            </Button>
+          </div>
         ) : null}
       </div>
 

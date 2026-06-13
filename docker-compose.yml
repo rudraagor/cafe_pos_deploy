@@ -24,7 +24,32 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+    container_name: cafepos-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://cafe:cafe@db:5432/cafepos
+      AUTH_SECRET: docker-demo-secret-change-me-in-production
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      KDS_PIN: "2468"
+      RECEIPT_BRAND_NAME: "Chai Biskit Cafe"
+      RECEIPT_BRAND_ADDRESS: "Vadodara, Gujarat"
+      RECEIPT_BRAND_FOOTER: "Thank you for dining with us."
+      RECEIPT_PREP_MINUTES: "15"
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

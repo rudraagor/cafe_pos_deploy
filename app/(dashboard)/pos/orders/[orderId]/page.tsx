@@ -75,6 +75,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
             | "fixed"
             | undefined,
           couponValue: order.coupon ? Number(order.coupon.value) : undefined,
+          couponStackable: order.coupon?.stackable,
           customerId: order.customerId ?? undefined,
           customerName: order.customer?.name,
       }

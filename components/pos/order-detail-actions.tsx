@@ -53,6 +53,7 @@ type EditDraftPayload = {
   couponId?: string;
   couponDiscountType?: "percent" | "fixed";
   couponValue?: number;
+  couponStackable?: boolean;
   customerId?: string;
   customerName?: string;
 };
@@ -104,6 +105,7 @@ export function OrderDetailActions({
       couponId: editPayload.couponId,
       couponDiscountType: editPayload.couponDiscountType,
       couponValue: editPayload.couponValue,
+      couponStackable: editPayload.couponStackable,
       customerId: editPayload.customerId,
       customerName: editPayload.customerName,
     });

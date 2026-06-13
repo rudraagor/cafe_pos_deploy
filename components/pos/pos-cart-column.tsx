@@ -43,6 +43,7 @@ export function PosCartColumn({
   const cart = useTableCart(tableId);
   const setQty = useCartStore((s) => s.setQty);
   const removeItem = useCartStore((s) => s.removeItem);
+  const setCoupon = useCartStore((s) => s.setCoupon);
   const clearTable = useCartStore((s) => s.clearTable);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -57,12 +58,14 @@ export function PosCartColumn({
       code: cart.couponCode,
       discountType: cart.couponDiscountType ?? ("percent" as const),
       value: cart.couponValue,
+      stackable: cart.couponStackable,
     };
   }, [
     cart.couponCode,
     cart.couponId,
     cart.couponDiscountType,
     cart.couponValue,
+    cart.couponStackable,
   ]);
 
   const computed = useMemo(
@@ -229,9 +232,22 @@ export function PosCartColumn({
           </p>
         ) : null}
         {cart.couponCode ? (
-          <p className="text-muted-foreground text-xs">
-            Coupon: <span className="text-foreground">{cart.couponCode}</span>
-          </p>
+          <div className="text-muted-foreground mt-2 flex items-center justify-between gap-2 text-xs">
+            <span>
+              Coupon: <span className="text-foreground">{cart.couponCode}</span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setCoupon(tableId, null);
+                toast.success("Coupon removed.");
+              }}
+            >
+              Remove
+            </Button>
+          </div>
         ) : null}
       </div>
 
