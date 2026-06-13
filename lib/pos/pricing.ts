@@ -1,6 +1,7 @@
 export type DiscountType = "percent" | "fixed";
 
 export type PricingLineInput = {
+  cartLineId?: string;
   productId: string;
   name: string;
   unitPrice: number;
@@ -8,6 +9,8 @@ export type PricingLineInput = {
   qty: number;
   isKitchenItem: boolean;
   categoryColor?: string;
+  modifiers?: string[];
+  note?: string;
 };
 
 export type PromotionInput = {

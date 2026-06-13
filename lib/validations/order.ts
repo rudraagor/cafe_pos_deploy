@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { modifierIds } from "@/lib/pos/modifiers";
 
 export const cartItemSchema = z.object({
   productId: z.string().uuid(),
@@ -8,6 +9,8 @@ export const cartItemSchema = z.object({
   qty: z.number().int().positive(),
   isKitchenItem: z.boolean(),
   categoryColor: z.string().optional(),
+  modifiers: z.array(z.enum(modifierIds)).default([]),
+  note: z.string().trim().max(160).optional(),
 });
 
 export const sendToKitchenSchema = z

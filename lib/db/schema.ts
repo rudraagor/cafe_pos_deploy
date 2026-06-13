@@ -80,6 +80,7 @@ export const products = pgTable("products", {
     .notNull()
     .default("0"),
   description: text("description"),
+  supportedModifiers: jsonb("supported_modifiers").notNull().default([]),
   isKitchenItem: boolean("is_kitchen_item").notNull().default(true),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   ...timestamps,
@@ -233,6 +234,8 @@ export const orderItems = pgTable("order_items", {
   lineTotal: numeric("line_total", { precision: 10, scale: 2 }).notNull(),
   isKitchenItem: boolean("is_kitchen_item").notNull().default(true),
   itemCompleted: boolean("item_completed").notNull().default(false),
+  modifiers: jsonb("modifiers").notNull().default([]),
+  note: text("note"),
   ...timestamps,
 });
 

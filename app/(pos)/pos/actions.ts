@@ -28,6 +28,10 @@ import {
 } from "@/lib/pos/session";
 import { getAppUrl } from "@/lib/receipt-brand";
 import { publishKdsChanged, publishReportsChanged } from "@/lib/realtime/publish";
+import {
+  modifiersAllowNote,
+  normalizeModifiers,
+} from "@/lib/pos/modifiers";
 import { customerSchema } from "@/lib/validations/customers";
 import { sendToKitchenSchema } from "@/lib/validations/order";
 import { paymentSchema } from "@/lib/validations/payment";
@@ -181,6 +185,9 @@ export async function sendToKitchen(
       taxRate: Number(product.taxRate),
       qty: item.qty,
       isKitchenItem: product.isKitchenItem,
+      modifiers: normalizeModifiers(item.modifiers),
+      note: item.note?.trim() || undefined,
+      supportedModifiers: normalizeModifiers(product.supportedModifiers),
     };
   });
   const hasMissingProduct = pricingItems.some((item) => item === null);
@@ -190,6 +197,24 @@ export async function sendToKitchen(
   const validPricingItems = pricingItems.filter(
     (item): item is NonNullable<(typeof pricingItems)[number]> => item !== null,
   );
+  for (const item of validPricingItems) {
+    const supported = new Set(item.supportedModifiers);
+    const unsupportedModifier = item.modifiers.find(
+      (modifier) => !supported.has(modifier),
+    );
+    if (unsupportedModifier) {
+      return {
+        ok: false,
+        error: "One of the selected prep options is not supported.",
+      };
+    }
+    if (item.note && !modifiersAllowNote(item.supportedModifiers)) {
+      return {
+        ok: false,
+        error: "This product does not support prep notes.",
+      };
+    }
+  }
 
   const promotions = await getActivePromotions();
   let coupon = null;
@@ -235,6 +260,8 @@ export async function sendToKitchen(
       lineDiscount: line.lineDiscount.toFixed(2),
       lineTotal: line.lineTotal.toFixed(2),
       isKitchenItem: line.isKitchenItem,
+      modifiers: normalizeModifiers(line.modifiers),
+      note: line.note?.trim() || null,
     }));
 
   let savedOrderId: string | null = null;

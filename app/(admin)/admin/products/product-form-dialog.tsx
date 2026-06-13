@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult, FieldErrors } from "@/lib/action-result";
+import { modifierPresets, type ModifierId } from "@/lib/pos/modifiers";
 import { type ProductInput, unitOptions } from "@/lib/validations/products";
 import { createInlineCategory } from "./actions";
 
@@ -35,6 +36,7 @@ export type ProductFormValue = {
   unitOfMeasure: (typeof unitOptions)[number];
   taxRate: string;
   description: string;
+  supportedModifiers: string[];
   isKitchenItem: boolean;
 };
 
@@ -61,6 +63,7 @@ function defaultProduct(product?: ProductFormValue): ProductFormValue {
       unitOfMeasure: "piece",
       taxRate: "5",
       description: "",
+      supportedModifiers: [],
       isKitchenItem: true,
     }
   );
@@ -150,7 +153,11 @@ export function ProductFormDialog({
     event.preventDefault();
     const formData = new FormData();
     for (const [key, value] of Object.entries(values)) {
+      if (key === "supportedModifiers") continue;
       formData.set(key, String(value));
+    }
+    for (const modifier of values.supportedModifiers) {
+      formData.append("supportedModifiers", modifier);
     }
 
     setFieldErrors(undefined);
@@ -171,6 +178,18 @@ export function ProductFormDialog({
       setFieldErrors(result.fieldErrors);
       setServerError(result.error);
       toast.error(result.error);
+    });
+  }
+
+  function toggleModifier(modifier: ModifierId) {
+    setValues((current) => {
+      const enabled = current.supportedModifiers.includes(modifier);
+      return {
+        ...current,
+        supportedModifiers: enabled
+          ? current.supportedModifiers.filter((item) => item !== modifier)
+          : [...current.supportedModifiers, modifier],
+      };
     });
   }
 
@@ -384,6 +403,36 @@ export function ProductFormDialog({
                 {fieldMessage(fieldErrors, "description")}
               </p>
             ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Supported prep options</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {modifierPresets.map((modifier) => {
+                const checked = values.supportedModifiers.includes(modifier.id);
+                return (
+                  <label
+                    key={modifier.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                  >
+                    <span>
+                      <span className="block text-sm font-medium">
+                        {modifier.label}
+                      </span>
+                      {modifier.noteAllowed ? (
+                        <span className="text-muted-foreground block text-xs">
+                          Allows waiter note.
+                        </span>
+                      ) : null}
+                    </span>
+                    <Switch
+                      checked={checked}
+                      onChange={() => toggleModifier(modifier.id)}
+                    />
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           {serverError ? (

@@ -24,9 +24,10 @@ export type CategoryRow = {
 
 type CategoryTableProps = {
   rows: CategoryRow[];
+  usedColors: string[];
 };
 
-export function CategoryTable({ rows }: CategoryTableProps) {
+export function CategoryTable({ rows, usedColors }: CategoryTableProps) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const filteredRows = useMemo(
@@ -83,6 +84,7 @@ export function CategoryTable({ rows }: CategoryTableProps) {
                     mode="edit"
                     category={{ name: row.name, color: row.color }}
                     action={updateCategory.bind(null, row.id)}
+                    usedColors={usedColors}
                   />
                   <DeleteButton
                     itemName={row.name}

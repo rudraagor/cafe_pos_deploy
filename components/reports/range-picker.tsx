@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { FilterCombobox } from "@/components/reports/filter-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -63,7 +64,11 @@ export function RangePicker({
             </Button>
           ))}
       </div>
-      <form action={submit} className="grid gap-3 lg:grid-cols-6">
+      <form
+        key={rangeToSearchParams(filters)}
+        action={submit}
+        className="grid gap-3 lg:grid-cols-6"
+      >
         <Input
           name="start"
           type="date"
@@ -76,21 +81,21 @@ export function RangePicker({
             new Date(filters.end.getTime() - 86400000),
           )}
         />
-        <FilterSelect
+        <FilterCombobox
           name="employeeId"
-          label="All employees"
+          placeholder="All employees"
           value={filters.employeeId}
           options={options.employees}
         />
-        <FilterSelect
+        <FilterCombobox
           name="sessionId"
-          label="All sessions"
+          placeholder="All sessions"
           value={filters.sessionId}
           options={options.sessions}
         />
-        <FilterSelect
+        <FilterCombobox
           name="productId"
-          label="All products"
+          placeholder="All products"
           value={filters.productId}
           options={options.products}
         />
@@ -99,32 +104,5 @@ export function RangePicker({
         </Button>
       </form>
     </div>
-  );
-}
-
-function FilterSelect({
-  name,
-  label,
-  value,
-  options,
-}: {
-  name: string;
-  label: string;
-  value?: string;
-  options: { id: string; label: string }[];
-}) {
-  return (
-    <select
-      name={name}
-      defaultValue={value ?? "all"}
-      className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-    >
-      <option value="all">{label}</option>
-      {options.map((option) => (
-        <option key={option.id} value={option.id}>
-          {option.label}
-        </option>
-      ))}
-    </select>
   );
 }

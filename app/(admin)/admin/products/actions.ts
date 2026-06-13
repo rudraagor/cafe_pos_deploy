@@ -6,6 +6,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { categories, products } from "@/lib/db/schema";
+import { normalizeModifiers } from "@/lib/pos/modifiers";
 import { categoryPalette, categorySchema } from "@/lib/validations/categories";
 import { type ProductInput, productSchema } from "@/lib/validations/products";
 
@@ -30,6 +31,9 @@ function parseProduct(formData: FormData): ProductActionResult | ProductInput {
     unitOfMeasure: formData.get("unitOfMeasure"),
     taxRate: formData.get("taxRate"),
     description: rawDescription || null,
+    supportedModifiers: normalizeModifiers(
+      formData.getAll("supportedModifiers"),
+    ),
     isKitchenItem: formData.get("isKitchenItem") === "true",
   });
 
@@ -52,6 +56,7 @@ function productValues(input: ProductInput) {
     unitOfMeasure: input.unitOfMeasure,
     taxRate: input.taxRate.toFixed(2),
     description: input.description,
+    supportedModifiers: input.supportedModifiers,
     isKitchenItem: input.isKitchenItem,
   };
 }
@@ -144,10 +149,26 @@ export async function createInlineCategory(
   name: string,
 ): Promise<InlineCategoryResult> {
   await requireRole("admin");
+  const existingColors = await db.query.categories.findMany({
+    columns: { color: true },
+  });
+  const usedColors = new Set(
+    existingColors.map((category) => category.color.toLowerCase()),
+  );
+  const nextColor = categoryPalette.find(
+    (color) => !usedColors.has(color.toLowerCase()),
+  );
+  if (!nextColor) {
+    return {
+      ok: false,
+      error: "All category palette colors are already in use.",
+      fieldErrors: { color: ["Choose a unique category color."] },
+    };
+  }
 
   const parsed = categorySchema.safeParse({
     name,
-    color: categoryPalette[0],
+    color: nextColor,
   });
 
   if (!parsed.success) {

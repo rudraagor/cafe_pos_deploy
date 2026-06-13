@@ -43,6 +43,16 @@ async function findCategoryByName(name: string, excludeId?: string) {
   });
 }
 
+async function findCategoryByColor(color: string, excludeId?: string) {
+  const normalized = color.toLowerCase();
+
+  return db.query.categories.findFirst({
+    where: excludeId
+      ? sql`${categories.id} <> ${excludeId} and lower(${categories.color}) = ${normalized}`
+      : sql`lower(${categories.color}) = ${normalized}`,
+  });
+}
+
 export async function createCategory(
   formData: FormData,
 ): Promise<CategoryActionResult> {
@@ -57,6 +67,14 @@ export async function createCategory(
       ok: false,
       error: "A category with this name already exists.",
       fieldErrors: { name: ["A category with this name already exists."] },
+    };
+  }
+  const existingColor = await findCategoryByColor(parsed.color);
+  if (existingColor) {
+    return {
+      ok: false,
+      error: "This category color is already in use.",
+      fieldErrors: { color: ["Choose a unique category color."] },
     };
   }
 
@@ -81,6 +99,14 @@ export async function updateCategory(
       ok: false,
       error: "A category with this name already exists.",
       fieldErrors: { name: ["A category with this name already exists."] },
+    };
+  }
+  const existingColor = await findCategoryByColor(parsed.color, id);
+  if (existingColor) {
+    return {
+      ok: false,
+      error: "This category color is already in use.",
+      fieldErrors: { color: ["Choose a unique category color."] },
     };
   }
 

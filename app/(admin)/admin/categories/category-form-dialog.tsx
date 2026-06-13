@@ -36,12 +36,14 @@ type CategoryFormDialogProps = {
     color: string;
   };
   action: CategoryFormAction;
+  usedColors?: string[];
 };
 
 export function CategoryFormDialog({
   mode,
   category,
   action,
+  usedColors = [],
 }: CategoryFormDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -64,6 +66,11 @@ export function CategoryFormDialog({
   const currentColor = color ?? defaultValues.color;
   const isCreate = mode === "create";
   const title = isCreate ? "New category" : "Edit category";
+  const unavailableColors = new Set(
+    usedColors
+      .filter((color) => color.toLowerCase() !== category?.color.toLowerCase())
+      .map((color) => color.toLowerCase()),
+  );
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -178,8 +185,18 @@ export function CategoryFormDialog({
                 <button
                   key={swatch}
                   type="button"
-                  aria-label={`Use ${swatch}`}
-                  className="ring-offset-background focus-visible:ring-ring size-7 rounded-lg border transition hover:scale-105 focus-visible:ring-2 focus-visible:outline-none"
+                  aria-label={
+                    unavailableColors.has(swatch.toLowerCase())
+                      ? `${swatch} unavailable`
+                      : `Use ${swatch}`
+                  }
+                  disabled={unavailableColors.has(swatch.toLowerCase())}
+                  className="ring-offset-background focus-visible:ring-ring size-7 rounded-lg border transition hover:scale-105 focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+                  title={
+                    unavailableColors.has(swatch.toLowerCase())
+                      ? "Already used by another category"
+                      : undefined
+                  }
                   style={{
                     backgroundColor: swatch,
                     borderColor:

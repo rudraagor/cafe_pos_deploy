@@ -21,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TAKEAWAY_CART_ID, useCartStore } from "@/lib/pos/cart-store";
+import { modifierLabel } from "@/lib/pos/modifiers";
 import { formatMoney } from "@/lib/pos/pricing";
 
 type OrderItemRow = {
@@ -29,6 +30,8 @@ type OrderItemRow = {
   unitPrice: string;
   lineTotal: string;
   lineDiscount: string;
+  modifiers: string[];
+  note: string | null;
 };
 
 type EditDraftPayload = {
@@ -42,6 +45,8 @@ type EditDraftPayload = {
     taxRate: number;
     qty: number;
     isKitchenItem: boolean;
+    modifiers?: string[];
+    note?: string;
   }[];
   couponCode?: string;
   couponId?: string;
@@ -230,6 +235,23 @@ export function OrderItemsList({ items }: { items: OrderItemRow[] }) {
                 ? ` · -${formatMoney(Number(item.lineDiscount))} off`
                 : ""}
             </p>
+            {item.modifiers.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {item.modifiers.map((modifier) => (
+                  <span
+                    key={modifier}
+                    className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                  >
+                    {modifierLabel(modifier)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {item.note ? (
+              <p className="mt-1 text-xs font-medium text-amber-700">
+                {item.note}
+              </p>
+            ) : null}
           </div>
           <span className="font-medium">
             {formatMoney(Number(item.lineTotal))}

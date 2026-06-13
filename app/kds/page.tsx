@@ -35,6 +35,10 @@ export default async function KdsPage() {
           categoryName: item.product?.category?.name ?? null,
           quantity: item.quantity,
           itemCompleted: item.itemCompleted,
+          modifiers: Array.isArray(item.modifiers)
+            ? item.modifiers.map(String)
+            : [],
+          note: item.note,
         })),
       }))}
     />

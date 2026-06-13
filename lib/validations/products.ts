@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { modifierIds } from "@/lib/pos/modifiers";
 
 export const unitOptions = ["piece", "kg", "litre"] as const;
 
@@ -23,6 +24,7 @@ export const productSchema = z.object({
     .trim()
     .max(600, "Description must be 600 characters or fewer.")
     .nullable(),
+  supportedModifiers: z.array(z.enum(modifierIds)).default([]),
   isKitchenItem: z.boolean(),
 });
 

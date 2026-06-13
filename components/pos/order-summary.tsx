@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Loader2, Send, Tag, User } from "lucide-react";
+import { Loader2, Send, Tag, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -37,9 +37,8 @@ export function OrderSummary({
   const [isPending, startTransition] = useTransition();
 
   const computed = useCartPricing(tableId, promotions);
-  const hasKitchenItems = cart.items.some((item) => item.isKitchenItem);
 
-  function handleSend(payAfter = false) {
+  function handleSend() {
     if (cart.items.length === 0) {
       toast.error("Add products before sending to kitchen.");
       return;
@@ -59,9 +58,7 @@ export function OrderSummary({
         toast.success(result.message ?? "Sent to kitchen.");
         clearTable(tableId);
         router.push(
-          payAfter && result.orderId
-            ? `/pos/orders/${result.orderId}?pay=1`
-            : "/pos/orders",
+          "/pos/orders",
         );
         router.refresh();
       } else {
@@ -146,7 +143,7 @@ export function OrderSummary({
         <Button
           type="button"
           className="w-full"
-          onClick={() => handleSend(false)}
+          onClick={handleSend}
           disabled={isPending || cart.items.length === 0}
         >
           {isPending ? (
@@ -156,25 +153,10 @@ export function OrderSummary({
           )}
           Send to Kitchen
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() => handleSend(true)}
-          disabled={isPending || cart.items.length === 0 || hasKitchenItems}
-          title={
-            hasKitchenItems
-              ? "Kitchen orders can be paid after KDS marks them ready."
-              : undefined
-          }
-        >
-          {isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <CreditCard className="size-4" />
-          )}
-          {hasKitchenItems ? "Pay after ready" : "Send & Pay"}
-        </Button>
+        <p className="text-muted-foreground px-1 text-xs">
+          Payment is available from the saved order once the kitchen marks it
+          ready.
+        </p>
       </div>
 
       <DiscountPopup

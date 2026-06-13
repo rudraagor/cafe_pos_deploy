@@ -9,6 +9,7 @@ import {
   type PromotionInput,
 } from "@/lib/pos/pricing";
 import { Button } from "@/components/ui/button";
+import { modifierLabel } from "@/lib/pos/modifiers";
 
 type CartPanelProps = {
   tableId: string;
@@ -55,7 +56,7 @@ export function CartPanel({ tableId, promotions }: CartPanelProps) {
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {computed.lines.map((line) => (
           <div
-            key={line.productId}
+            key={line.cartLineId ?? line.productId}
             className="flex items-start gap-2 rounded-lg border p-2"
           >
             <div className="min-w-0 flex-1">
@@ -68,13 +69,32 @@ export function CartPanel({ tableId, promotions }: CartPanelProps) {
                   -{formatMoney(line.lineDiscount)} promo
                 </p>
               ) : null}
+              {line.modifiers?.length ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {line.modifiers.map((modifier) => (
+                    <span
+                      key={modifier}
+                      className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                    >
+                      {modifierLabel(modifier)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {line.note ? (
+                <p className="mt-1 text-xs font-medium text-amber-700">
+                  {line.note}
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-1">
               <Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                onClick={() => setQty(tableId, line.productId, line.qty - 1)}
+                onClick={() =>
+                  setQty(tableId, line.cartLineId ?? line.productId, line.qty - 1)
+                }
               >
                 <Minus className="size-3" />
               </Button>
@@ -85,7 +105,9 @@ export function CartPanel({ tableId, promotions }: CartPanelProps) {
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                onClick={() => setQty(tableId, line.productId, line.qty + 1)}
+                onClick={() =>
+                  setQty(tableId, line.cartLineId ?? line.productId, line.qty + 1)
+                }
               >
                 <Plus className="size-3" />
               </Button>
@@ -93,7 +115,9 @@ export function CartPanel({ tableId, promotions }: CartPanelProps) {
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => removeItem(tableId, line.productId)}
+                onClick={() =>
+                  removeItem(tableId, line.cartLineId ?? line.productId)
+                }
               >
                 <Trash2 className="size-3" />
               </Button>

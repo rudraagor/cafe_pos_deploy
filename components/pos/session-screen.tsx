@@ -52,9 +52,7 @@ export function SessionScreen({
           {lastClosedAt ? (
             <div className="bg-muted rounded-lg p-4 text-sm">
               <p className="text-muted-foreground">Last session closed</p>
-              <p className="font-medium">
-                {new Date(lastClosedAt).toLocaleString()}
-              </p>
+              <p className="font-medium">{formatSessionDate(lastClosedAt)}</p>
               {lastClosingAmount != null ? (
                 <p className="text-muted-foreground mt-2">
                   Closing sales:{" "}
@@ -81,4 +79,12 @@ export function SessionScreen({
       </Card>
     </div>
   );
+}
+
+function formatSessionDate(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value));
 }

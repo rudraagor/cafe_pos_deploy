@@ -30,15 +30,22 @@ export default async function CategoriesPage() {
     color: category.color,
     productCount: category.products.length,
   }));
+  const usedColors = rows.map((row) => row.color);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Categories"
         description="Manage the menu groups and colors that carry into the POS experience."
-        action={<CategoryFormDialog mode="create" action={createCategory} />}
+        action={
+          <CategoryFormDialog
+            mode="create"
+            action={createCategory}
+            usedColors={usedColors}
+          />
+        }
       />
-      <CategoryTable rows={rows} />
+      <CategoryTable rows={rows} usedColors={usedColors} />
     </div>
   );
 }

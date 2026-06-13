@@ -47,6 +47,9 @@ export default async function TakeawayPage() {
           price: p.price,
           taxRate: p.taxRate,
           isKitchenItem: p.isKitchenItem,
+          supportedModifiers: Array.isArray(p.supportedModifiers)
+            ? p.supportedModifiers.map(String)
+            : [],
           categoryId: p.categoryId,
           categoryName: p.categoryName,
           categoryColor: p.categoryColor,

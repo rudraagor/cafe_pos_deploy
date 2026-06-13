@@ -45,6 +45,10 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
               taxRate: Number(item.taxRateSnapshot),
               qty: item.quantity,
               isKitchenItem: item.isKitchenItem,
+              modifiers: Array.isArray(item.modifiers)
+                ? item.modifiers.map(String)
+                : [],
+              note: item.note ?? undefined,
             })),
           couponCode: order.coupon?.code,
           couponId: order.coupon?.id,
@@ -167,6 +171,10 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
             unitPrice: item.unitPrice,
             lineTotal: item.lineTotal,
             lineDiscount: item.lineDiscount,
+            modifiers: Array.isArray(item.modifiers)
+              ? item.modifiers.map(String)
+              : [],
+            note: item.note,
           }))}
         />
       </div>

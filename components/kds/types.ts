@@ -7,6 +7,8 @@ export type KdsTicketItem = {
   categoryName: string | null;
   quantity: number;
   itemCompleted: boolean;
+  modifiers: string[];
+  note: string | null;
 };
 
 export type KdsTicket = {

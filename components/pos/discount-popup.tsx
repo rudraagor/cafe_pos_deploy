@@ -1,7 +1,8 @@
 "use client";
 
+import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import { Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { validateCoupon } from "@/app/(pos)/pos/actions";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,44 @@ export function DiscountPopup({
   const setCoupon = useCartStore((s) => s.setCoupon);
   const [code, setCode] = useState(cart.couponCode ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
+
+  useEffect(() => {
+    if (!scannerOpen || !videoRef.current) return;
+
+    let cancelled = false;
+    const reader = new BrowserQRCodeReader();
+    setScannerError(null);
+
+    reader
+      .decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+        if (!result || cancelled) return;
+        const nextCode = extractCouponCode(result.getText());
+        setCode(nextCode.toUpperCase());
+        setScannerOpen(false);
+        toast.success("Coupon QR scanned.");
+      })
+      .then((controls) => {
+        if (cancelled) {
+          controls.stop();
+          return;
+        }
+        controlsRef.current = controls;
+      })
+      .catch(() => {
+        setScannerError("Camera unavailable. Enter the code manually.");
+      });
+
+    return () => {
+      cancelled = true;
+      controlsRef.current?.stop();
+      controlsRef.current = null;
+    };
+  }, [scannerOpen]);
 
   function handleApply() {
     const trimmed = code.trim();
@@ -89,6 +127,30 @@ export function DiscountPopup({
           {error ? (
             <p className="text-destructive text-sm">{error}</p>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setScannerOpen((current) => !current)}
+          >
+            {scannerOpen ? "Close scanner" : "Scan QR code"}
+          </Button>
+          {scannerOpen ? (
+            <div className="space-y-2 rounded-lg border p-2">
+              <video
+                ref={videoRef}
+                className="aspect-video w-full rounded-md bg-black"
+                muted
+                playsInline
+              />
+              <p className="text-muted-foreground text-xs">
+                Point the camera at a coupon QR.
+              </p>
+              {scannerError ? (
+                <p className="text-destructive text-xs">{scannerError}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           {cart.couponCode ? (
@@ -104,4 +166,13 @@ export function DiscountPopup({
       </DialogContent>
     </Dialog>
   );
+}
+
+function extractCouponCode(raw: string) {
+  try {
+    const url = new URL(raw);
+    return url.searchParams.get("code") ?? raw;
+  } catch {
+    return raw.trim();
+  }
 }

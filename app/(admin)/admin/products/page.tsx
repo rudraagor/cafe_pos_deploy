@@ -21,6 +21,7 @@ export default async function ProductsPage() {
         unitOfMeasure: true,
         taxRate: true,
         description: true,
+        supportedModifiers: true,
         isKitchenItem: true,
       },
       with: {
@@ -54,6 +55,9 @@ export default async function ProductsPage() {
     unitOfMeasure: product.unitOfMeasure,
     taxRate: product.taxRate,
     description: product.description ?? "",
+    supportedModifiers: Array.isArray(product.supportedModifiers)
+      ? product.supportedModifiers.map(String)
+      : [],
     isKitchenItem: product.isKitchenItem,
   }));
 

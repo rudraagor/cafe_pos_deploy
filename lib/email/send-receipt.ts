@@ -36,6 +36,7 @@ export async function sendReceiptEmail(
 
   const brand = getReceiptBrand();
   const receiptUrl = `${getAppUrl()}/receipt/${order.id}`;
+  const prepMinutes = Number(process.env.RECEIPT_PREP_MINUTES ?? 15);
 
   try {
     const resend = new Resend(apiKey);
@@ -49,6 +50,7 @@ export async function sendReceiptEmail(
         orderNumber: order.orderNumber,
         total: Number(order.total),
         receiptUrl,
+        prepMinutes: Number.isFinite(prepMinutes) ? prepMinutes : 15,
       }),
     });
     return { ok: true };

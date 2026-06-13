@@ -1,4 +1,5 @@
 import { formatMoney } from "@/lib/pos/pricing";
+import { modifierLabel } from "@/lib/pos/modifiers";
 
 type ReceiptItem = {
   nameSnapshot: string;
@@ -6,6 +7,8 @@ type ReceiptItem = {
   unitPrice: string;
   lineTotal: string;
   lineDiscount: string;
+  modifiers: unknown;
+  note: string | null;
 };
 
 type ReceiptPayment = {
@@ -95,6 +98,18 @@ export function Receipt({
                     ? ` · -${formatMoney(Number(item.lineDiscount))}`
                     : ""}
                 </p>
+                {Array.isArray(item.modifiers) && item.modifiers.length > 0 ? (
+                  <p className="text-xs font-medium text-neutral-700">
+                    {item.modifiers.map((modifier) =>
+                      modifierLabel(String(modifier)),
+                    ).join(", ")}
+                  </p>
+                ) : null}
+                {item.note ? (
+                  <p className="text-xs font-medium text-neutral-700">
+                    {item.note}
+                  </p>
+                ) : null}
               </div>
               <p className="font-medium">
                 {formatMoney(Number(item.lineTotal))}

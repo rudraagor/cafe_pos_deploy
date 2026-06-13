@@ -24,6 +24,7 @@ export async function getActiveProducts() {
       price: products.price,
       taxRate: products.taxRate,
       isKitchenItem: products.isKitchenItem,
+      supportedModifiers: products.supportedModifiers,
       categoryId: products.categoryId,
       categoryName: categories.name,
       categoryColor: categories.color,

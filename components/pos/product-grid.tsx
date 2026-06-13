@@ -1,7 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useCartStore } from "@/lib/pos/cart-store";
+import {
+  modifierLabel,
+  modifiersAllowNote,
+  normalizeModifiers,
+  type ModifierId,
+} from "@/lib/pos/modifiers";
 import { cn } from "@/lib/utils";
 
 export type PosProduct = {
@@ -10,6 +26,7 @@ export type PosProduct = {
   price: string;
   taxRate: string;
   isKitchenItem: boolean;
+  supportedModifiers: string[];
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
@@ -35,6 +52,9 @@ export function ProductGrid({
   searchQuery = "",
 }: ProductGridProps) {
   const [activeCategory, setActiveCategory] = useState<string | "all">("all");
+  const [customizing, setCustomizing] = useState<PosProduct | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<ModifierId[]>([]);
+  const [note, setNote] = useState("");
   const addItem = useCartStore((s) => s.addItem);
 
   const filtered = useMemo(() => {
@@ -46,6 +66,57 @@ export function ProductGrid({
       return matchesSearch && matchesCategory;
     });
   }, [products, searchQuery, activeCategory]);
+
+  function addProduct(product: PosProduct) {
+    const supportedModifiers = normalizeModifiers(product.supportedModifiers);
+    if (supportedModifiers.length > 0) {
+      setCustomizing(product);
+      setSelectedModifiers([]);
+      setNote("");
+      return;
+    }
+    addConfiguredProduct(product, [], "");
+  }
+
+  function addConfiguredProduct(
+    product: PosProduct,
+    modifiers: ModifierId[],
+    itemNote: string,
+  ) {
+    const color = product.categoryColor ?? "#64748b";
+    addItem(tableId, {
+      productId: product.id,
+      name: product.name,
+      unitPrice: Number(product.price),
+      taxRate: Number(product.taxRate),
+      isKitchenItem: product.isKitchenItem,
+      categoryColor: color,
+      modifiers,
+      note: itemNote.trim() || undefined,
+    });
+  }
+
+  function toggleModifier(modifier: ModifierId) {
+    setSelectedModifiers((current) =>
+      current.includes(modifier)
+        ? current.filter((item) => item !== modifier)
+        : [...current, modifier],
+    );
+  }
+
+  function submitCustomization() {
+    if (!customizing) return;
+    addConfiguredProduct(customizing, selectedModifiers, note);
+    setCustomizing(null);
+  }
+
+  const supportedForCustomizing = normalizeModifiers(
+    customizing?.supportedModifiers,
+  );
+  const noteAllowed = modifiersAllowNote([
+    ...supportedForCustomizing,
+    ...selectedModifiers,
+  ]);
 
   return (
     <div className="flex h-full flex-col">
@@ -95,16 +166,7 @@ export function ProductGrid({
             <button
               key={product.id}
               type="button"
-              onClick={() =>
-                addItem(tableId, {
-                  productId: product.id,
-                  name: product.name,
-                  unitPrice: Number(product.price),
-                  taxRate: Number(product.taxRate),
-                  isKitchenItem: product.isKitchenItem,
-                  categoryColor: color,
-                })
-              }
+              onClick={() => addProduct(product)}
               className="flex flex-col rounded-lg border p-3 text-left transition-transform active:scale-95"
               style={{ borderTopColor: color, borderTopWidth: 3 }}
             >
@@ -114,6 +176,11 @@ export function ProductGrid({
               <span className="text-muted-foreground mt-1 text-xs">
                 ₹{Number(product.price).toFixed(2)}
               </span>
+              {normalizeModifiers(product.supportedModifiers).length > 0 ? (
+                <span className="mt-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  Customizable
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -123,6 +190,62 @@ export function ProductGrid({
           </p>
         ) : null}
       </div>
+      <Dialog open={!!customizing} onOpenChange={(open) => !open && setCustomizing(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{customizing?.name ?? "Customize item"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Prep options</Label>
+              <div className="flex flex-wrap gap-2">
+                {supportedForCustomizing.map((modifier) => {
+                  const active = selectedModifiers.includes(modifier);
+                  return (
+                    <button
+                      key={modifier}
+                      type="button"
+                      onClick={() => toggleModifier(modifier)}
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-sm font-medium",
+                        active
+                          ? "border-amber-600 bg-amber-500/20 text-amber-800"
+                          : "hover:bg-muted",
+                      )}
+                    >
+                      {modifierLabel(modifier)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {noteAllowed ? (
+              <div className="space-y-2">
+                <Label htmlFor="item-note">Note</Label>
+                <Textarea
+                  id="item-note"
+                  value={note}
+                  maxLength={160}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Allergy, less spicy, packing note..."
+                />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCustomizing(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={submitCustomization}>
+              Add item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

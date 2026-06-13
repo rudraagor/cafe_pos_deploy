@@ -62,8 +62,39 @@ do not break reports; the AI actions return the setup message shown in the UI.
 1. Install dependencies: `npm install`.
 2. Start or connect Postgres.
 3. Apply schema: `npm run db:push` or `npm run db:migrate`.
-4. Seed demo data: `npm run db:seed`.
-5. Start the app: `npm run dev`.
+4. Seed bootstrap data: `npm run db:seed`.
+5. Optional demo history (90 days of sessions/orders for reports and AI):
+   `npm run db:seed:demo`.
+6. Start the app: `npm run dev`.
+
+### Demo seed (invigilator / judging)
+
+After the base seed, load ~90 days of realistic paid orders, sessions, customers,
+and extra menu items:
+
+```bash
+npm run db:seed
+npm run db:seed:demo
+```
+
+Regenerate demo transactions from scratch:
+
+```bash
+npm run db:seed:demo -- --force
+```
+
+Demo logins (all cashiers use `cashier1234`):
+
+- Admin: `admin@cafe.test` / `admin1234`
+- Cashiers: `cashier@cafe.test`, `priya@cafe.test`, `rahul@cafe.test`,
+  `ananya@cafe.test`, `vikram@cafe.test`
+
+Suggested checks after demo seed:
+
+- Admin -> Reports: KPIs and charts for Today, Last 7 days, This month
+- Admin -> Reports -> Sessions: long list with varied cashiers
+- Employee / session / product filters return different totals
+- AI briefing opens in a formatted dialog (no raw `**markdown**`)
 
 ## Core Manual Flows
 

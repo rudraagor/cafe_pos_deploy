@@ -9,6 +9,8 @@ import {
   toggleItemCompleted,
 } from "@/app/kds/actions";
 import { Button } from "@/components/ui/button";
+import { ticketAgeMinutes } from "@/lib/kds/ticket-age";
+import { modifierLabel } from "@/lib/pos/modifiers";
 import { cn } from "@/lib/utils";
 import type { KdsTicket } from "./types";
 
@@ -17,20 +19,31 @@ type TicketCardProps = {
 };
 
 export function TicketCard({ ticket }: TicketCardProps) {
-  const [now, setNow] = useState(() => Date.now());
   const [isPending, startTransition] = useTransition();
   const sentAt = useMemo(
     () => new Date(ticket.sentToKitchenAt).getTime(),
     [ticket.sentToKitchenAt],
   );
-  const ageMinutes = Math.max(0, Math.floor((now - sentAt) / 60000));
+  const [now, setNow] = useState(() => Date.now());
+  const ageMinutes = ticketAgeMinutes(sentAt, now);
   const ageTone =
-    ageMinutes >= 10 ? "red" : ageMinutes >= 5 ? "amber" : "green";
+    ticket.stage === "completed"
+      ? "blue"
+      : ageMinutes >= 10
+        ? "red"
+        : ageMinutes >= 5
+          ? "amber"
+          : "green";
 
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 30000);
-    return () => window.clearInterval(interval);
-  }, []);
+    const syncNow = () => setNow(Date.now());
+    const timeout = window.setTimeout(syncNow, 0);
+    const interval = window.setInterval(syncNow, 15000);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
+  }, [sentAt]);
 
   function runAction(action: () => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
@@ -59,6 +72,7 @@ export function TicketCard({ ticket }: TicketCardProps) {
         ageTone === "green" && "border-emerald-500/50",
         ageTone === "amber" && "border-amber-500/70",
         ageTone === "red" && "border-red-500/80",
+        ageTone === "blue" && "border-blue-500/80 bg-blue-500/5",
       )}
     >
       <header className="mb-3 flex items-start justify-between gap-3">
@@ -69,9 +83,14 @@ export function TicketCard({ ticket }: TicketCardProps) {
         <div
           className={cn(
             "flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold",
-            ageTone === "green" && "bg-emerald-500/15 text-emerald-300",
-            ageTone === "amber" && "bg-amber-500/15 text-amber-300",
-            ageTone === "red" && "bg-red-500/15 text-red-300",
+            ageTone === "green" &&
+              "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+            ageTone === "amber" &&
+              "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+            ageTone === "red" &&
+              "bg-red-500/15 text-red-700 dark:text-red-300",
+            ageTone === "blue" &&
+              "bg-blue-500/15 text-blue-700 dark:text-blue-300",
           )}
         >
           <Clock className="size-3" />
@@ -90,7 +109,9 @@ export function TicketCard({ ticket }: TicketCardProps) {
               "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
               item.itemCompleted
                 ? "border-emerald-500/40 bg-emerald-500/10 text-muted-foreground line-through"
-                : "border-border bg-card hover:bg-muted/40",
+                : item.modifiers.length > 0 || item.note
+                  ? "border-amber-500/70 bg-amber-500/10 hover:bg-amber-500/15"
+                  : "border-border bg-card hover:bg-muted/40",
             )}
           >
             <span
@@ -103,8 +124,27 @@ export function TicketCard({ ticket }: TicketCardProps) {
             >
               {item.itemCompleted ? <Check className="size-4" /> : null}
             </span>
-            <span className="min-w-0 flex-1 font-medium">
-              {item.quantity} x {item.nameSnapshot}
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">
+                {item.quantity} x {item.nameSnapshot}
+              </span>
+              {item.modifiers.length > 0 ? (
+                <span className="mt-1 flex flex-wrap gap-1">
+                  {item.modifiers.map((modifier) => (
+                    <span
+                      key={modifier}
+                      className="rounded-full bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-100"
+                    >
+                      {modifierLabel(modifier)}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+              {item.note ? (
+                <span className="mt-1 block text-xs font-bold text-amber-800 dark:text-amber-100">
+                  {item.note}
+                </span>
+              ) : null}
             </span>
           </button>
         ))}

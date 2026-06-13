@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { PricingLineInput } from "./pricing";
+import { normalizeModifiers } from "./modifiers";
 
 export type CartItem = PricingLineInput;
 
@@ -25,8 +26,8 @@ export const EMPTY_CART: TableCart = { items: [] };
 type CartState = {
   carts: Record<string, TableCart>;
   addItem: (tableId: string, item: Omit<CartItem, "qty">) => void;
-  setQty: (tableId: string, productId: string, qty: number) => void;
-  removeItem: (tableId: string, productId: string) => void;
+  setQty: (tableId: string, cartLineId: string, qty: number) => void;
+  removeItem: (tableId: string, cartLineId: string) => void;
   setCoupon: (
     tableId: string,
     coupon: {
@@ -60,6 +61,16 @@ function cartOrEmpty(carts: Record<string, TableCart>, tableId: string) {
   return carts[tableId] ?? EMPTY_CART;
 }
 
+function lineKey(item: Pick<CartItem, "productId" | "modifiers" | "note">) {
+  const modifiers = normalizeModifiers(item.modifiers).join(",");
+  const note = (item.note ?? "").trim();
+  return `${item.productId}|${modifiers}|${note}`;
+}
+
+function getLineId(item: CartItem) {
+  return item.cartLineId ?? lineKey(item);
+}
+
 /** Select a table cart with a stable empty fallback (safe for SSR + persist). */
 export function useTableCart(tableId: string) {
   return useCartStore((s) => cartOrEmpty(s.carts, tableId));
@@ -73,32 +84,38 @@ export const useCartStore = create<CartState>()(
       addItem(tableId, item) {
         set((state) => {
           const cart = cartOrEmpty(state.carts, tableId);
-          const existing = cart.items.find((i) => i.productId === item.productId);
+          const nextItem = {
+            ...item,
+            modifiers: normalizeModifiers(item.modifiers),
+            note: item.note?.trim() || undefined,
+          };
+          const cartLineId = lineKey(nextItem);
+          const existing = cart.items.find((i) => getLineId(i) === cartLineId);
           const items = existing
             ? cart.items.map((i) =>
-                i.productId === item.productId
-                  ? { ...i, qty: i.qty + 1 }
+                getLineId(i) === cartLineId
+                  ? { ...i, cartLineId, qty: i.qty + 1 }
                   : i,
               )
-            : [...cart.items, { ...item, qty: 1 }];
+            : [...cart.items, { ...nextItem, cartLineId, qty: 1 }];
           return { carts: { ...state.carts, [tableId]: { ...cart, items } } };
         });
       },
 
-      setQty(tableId, productId, qty) {
+      setQty(tableId, cartLineId, qty) {
         set((state) => {
           const cart = cartOrEmpty(state.carts, tableId);
           const items =
             qty <= 0
-              ? cart.items.filter((i) => i.productId !== productId)
+              ? cart.items.filter((i) => getLineId(i) !== cartLineId)
               : cart.items.map((i) =>
-                  i.productId === productId ? { ...i, qty } : i,
+                  getLineId(i) === cartLineId ? { ...i, qty } : i,
                 );
           return { carts: { ...state.carts, [tableId]: { ...cart, items } } };
         });
       },
 
-      removeItem(tableId, productId) {
+      removeItem(tableId, cartLineId) {
         set((state) => {
           const cart = cartOrEmpty(state.carts, tableId);
           return {
@@ -106,7 +123,7 @@ export const useCartStore = create<CartState>()(
               ...state.carts,
               [tableId]: {
                 ...cart,
-                items: cart.items.filter((i) => i.productId !== productId),
+                items: cart.items.filter((i) => getLineId(i) !== cartLineId),
               },
             },
           };
@@ -153,7 +170,12 @@ export const useCartStore = create<CartState>()(
             ...state.carts,
             [tableId]: {
               orderId: draft.orderId,
-              items: draft.items,
+              items: draft.items.map((item) => ({
+                ...item,
+                modifiers: normalizeModifiers(item.modifiers),
+                note: item.note?.trim() || undefined,
+                cartLineId: item.cartLineId ?? lineKey(item),
+              })),
               couponCode: draft.couponCode,
               couponId: draft.couponId,
               couponDiscountType: draft.couponDiscountType,

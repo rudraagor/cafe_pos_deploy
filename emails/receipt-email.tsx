@@ -17,6 +17,7 @@ type ReceiptEmailProps = {
   orderNumber: string;
   total: number;
   receiptUrl: string;
+  prepMinutes: number;
 };
 
 export function ReceiptEmail({
@@ -25,6 +26,7 @@ export function ReceiptEmail({
   orderNumber,
   total,
   receiptUrl,
+  prepMinutes,
 }: ReceiptEmailProps) {
   return (
     <Html>
@@ -38,6 +40,9 @@ export function ReceiptEmail({
           <Text style={text}>Hi {customerName},</Text>
           <Text style={text}>
             Thanks for visiting. Your order {orderNumber} is paid.
+          </Text>
+          <Text style={text}>
+            Order received. It should be ready within about {prepMinutes} minutes.
           </Text>
           <Section style={totalBox}>
             <Text style={label}>Total paid</Text>
