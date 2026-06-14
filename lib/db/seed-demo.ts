@@ -22,6 +22,7 @@ import {
 import {
   replaceLegacySinglePromotion,
   seedPromotionsIfMissing,
+  type SeedDb,
 } from "./seed-demo/seed-promotions";
 import {
   createRng,
@@ -73,7 +74,7 @@ function startOfToday() {
   return now;
 }
 
-async function hasExistingDemoData(db: ReturnType<typeof drizzle>) {
+async function hasExistingDemoData(db: SeedDb) {
   const today = startOfToday();
   const [row] = await db
     .select({ value: count() })
@@ -87,7 +88,7 @@ async function hasExistingDemoData(db: ReturnType<typeof drizzle>) {
   return Number(row?.value ?? 0) > 10;
 }
 
-async function wipeDemoTransactions(db: ReturnType<typeof drizzle>) {
+async function wipeDemoTransactions(db: SeedDb) {
   console.log("Removing existing demo transactions...");
   await db.delete(schema.payments);
   await db.delete(schema.orderItems);
@@ -98,7 +99,7 @@ async function wipeDemoTransactions(db: ReturnType<typeof drizzle>) {
     .where(like(schema.customers.email, `%${DEMO_CUSTOMER_EMAIL_DOMAIN}`));
 }
 
-async function ensureBaseSeed(db: ReturnType<typeof drizzle>) {
+async function ensureBaseSeed(db: SeedDb) {
   const [product] = await db
     .select({ id: schema.products.id })
     .from(schema.products)
@@ -115,7 +116,7 @@ async function ensureBaseSeed(db: ReturnType<typeof drizzle>) {
   }
 }
 
-async function seedFixtures(db: ReturnType<typeof drizzle>) {
+async function seedFixtures(db: SeedDb) {
   const passwordHash = await bcrypt.hash(DEMO_EMPLOYEE_PASSWORD, 10);
   const employees = bulk
     ? [...DEMO_EMPLOYEES, ...generateBulkEmployees(employeeTarget)]
@@ -254,7 +255,7 @@ async function seedFixtures(db: ReturnType<typeof drizzle>) {
   }
 }
 
-async function loadSeedContext(db: ReturnType<typeof drizzle>): Promise<SeedContext> {
+async function loadSeedContext(db: SeedDb): Promise<SeedContext> {
   const products = await db.select().from(schema.products);
   const tables = await db.select().from(schema.tables);
   const employees = await db
@@ -305,7 +306,7 @@ async function loadSeedContext(db: ReturnType<typeof drizzle>): Promise<SeedCont
 }
 
 async function insertGeneratedHistory(
-  db: ReturnType<typeof drizzle>,
+  db: SeedDb,
   sessions: GeneratedSession[],
 ) {
   const allOrders = sessions.flatMap((session) => session.orders);

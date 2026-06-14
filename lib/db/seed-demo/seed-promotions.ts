@@ -3,9 +3,9 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/lib/db/schema";
 import { buildPromotionSeedRows } from "@/lib/db/seed-demo/promotion-fixtures";
 
-type Db = NodePgDatabase<typeof schema>;
+export type SeedDb = NodePgDatabase<typeof schema>;
 
-export async function seedPromotionsIfMissing(db: Db) {
+export async function seedPromotionsIfMissing(db: SeedDb) {
   const products = await db
     .select({
       id: schema.products.id,
@@ -39,7 +39,7 @@ export async function seedPromotionsIfMissing(db: Db) {
   return rows.length;
 }
 
-export async function replaceLegacySinglePromotion(db: Db) {
+export async function replaceLegacySinglePromotion(db: SeedDb) {
   await db
     .delete(schema.promotions)
     .where(eq(schema.promotions.name, "Bulk Coffee Deal"));
