@@ -4,9 +4,18 @@ import {
   parseReportFilters,
   reportParamsFromUrlSearchParams,
 } from "@/lib/reports/range";
+import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
 
 export async function GET(request: Request) {
-  await requireRole("admin");
+  const user = await requireRole("admin");
+  const limit = checkRateLimit({
+    scope: "reports:export:csv",
+    identifier: user.id,
+    limit: 20,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) return rateLimitResponse(limit);
+
   const url = new URL(request.url);
   const filters = parseReportFilters(
     reportParamsFromUrlSearchParams(url.searchParams),

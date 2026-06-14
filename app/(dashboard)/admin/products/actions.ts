@@ -3,6 +3,7 @@
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
+import { writeAuditLog } from "@/lib/audit";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { categories, products } from "@/lib/db/schema";
@@ -128,7 +129,7 @@ export async function updateProduct(
 }
 
 export async function deleteProduct(id: string): Promise<ActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const [deleted] = await db
     .delete(products)
@@ -138,6 +139,12 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
   if (!deleted) {
     return { ok: false, error: "Product not found." };
   }
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "stock.product_deleted",
+    entityType: "product",
+    entityId: id,
+  });
 
   revalidatePath("/admin/products");
   revalidatePath("/admin/coupons");
@@ -149,7 +156,7 @@ export async function toggleProductOutOfStock(
   id: string,
   isOutOfStock: boolean,
 ): Promise<ActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const [updated] = await db
     .update(products)
@@ -160,6 +167,13 @@ export async function toggleProductOutOfStock(
   if (!updated) {
     return { ok: false, error: "Product not found." };
   }
+  await writeAuditLog({
+    actorId: actor.id,
+    action: isOutOfStock ? "stock.marked_out" : "stock.restored",
+    entityType: "product",
+    entityId: id,
+    metadata: { isOutOfStock },
+  });
 
   revalidatePath("/admin/products");
   revalidatePath("/pos");

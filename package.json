@@ -20,7 +20,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx lib/db/seed.ts",
     "db:seed:demo": "tsx lib/db/seed-demo.ts",
-    "test": "tsx lib/pos/pricing.test.ts && tsx lib/pos/upi.test.ts && tsx lib/reports/range.test.ts && tsx lib/kds/ticket-age.test.ts",
+    "db:seed:demo:bulk": "tsx lib/db/seed-demo.ts --bulk --days=180 --force",
+    "test": "tsx lib/pos/pricing.test.ts && tsx lib/pos/upi.test.ts && tsx lib/pos/qr-ordering.test.ts && tsx lib/reports/range.test.ts && tsx lib/kds/ticket-age.test.ts",
     "test:pricing": "tsx lib/pos/pricing.test.ts"
   },
   "dependencies": {

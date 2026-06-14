@@ -3,6 +3,7 @@
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
+import { writeAuditLog } from "@/lib/audit";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { coupons, promotions } from "@/lib/db/schema";
@@ -153,7 +154,7 @@ function promotionValues(input: PromotionInput) {
 export async function createCoupon(
   formData: FormData,
 ): Promise<CouponActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parseCoupon(formData);
   if ("ok" in parsed) return parsed;
@@ -167,7 +168,17 @@ export async function createCoupon(
     };
   }
 
-  await db.insert(coupons).values(couponValues(parsed));
+  const [created] = await db
+    .insert(coupons)
+    .values(couponValues(parsed))
+    .returning({ id: coupons.id });
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "discount.coupon_created",
+    entityType: "coupon",
+    entityId: created.id,
+    metadata: { code: parsed.code, active: parsed.active },
+  });
   revalidatePath("/admin/coupons");
 
   return { ok: true, message: "Coupon created." };
@@ -177,7 +188,7 @@ export async function updateCoupon(
   id: string,
   formData: FormData,
 ): Promise<CouponActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parseCoupon(formData);
   if ("ok" in parsed) return parsed;
@@ -198,6 +209,13 @@ export async function updateCoupon(
     .returning({ id: coupons.id });
 
   if (!updated) return { ok: false, error: "Coupon not found." };
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "discount.coupon_updated",
+    entityType: "coupon",
+    entityId: id,
+    metadata: { code: parsed.code, active: parsed.active },
+  });
 
   revalidatePath("/admin/coupons");
 
@@ -205,7 +223,7 @@ export async function updateCoupon(
 }
 
 export async function deleteCoupon(id: string): Promise<ActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const [deleted] = await db
     .delete(coupons)
@@ -213,6 +231,12 @@ export async function deleteCoupon(id: string): Promise<ActionResult> {
     .returning({ id: coupons.id });
 
   if (!deleted) return { ok: false, error: "Coupon not found." };
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "discount.coupon_deleted",
+    entityType: "coupon",
+    entityId: id,
+  });
 
   revalidatePath("/admin/coupons");
 
@@ -222,7 +246,7 @@ export async function deleteCoupon(id: string): Promise<ActionResult> {
 export async function createPromotion(
   formData: FormData,
 ): Promise<PromotionActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parsePromotion(formData);
   if ("ok" in parsed) return parsed;
@@ -236,7 +260,21 @@ export async function createPromotion(
     };
   }
 
-  await db.insert(promotions).values(promotionValues(parsed));
+  const [created] = await db
+    .insert(promotions)
+    .values(promotionValues(parsed))
+    .returning({ id: promotions.id });
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "discount.promotion_created",
+    entityType: "promotion",
+    entityId: created.id,
+    metadata: {
+      name: parsed.name,
+      ruleType: parsed.ruleType,
+      active: parsed.active,
+    },
+  });
   revalidatePath("/admin/coupons");
 
   return { ok: true, message: "Promotion created." };
@@ -246,7 +284,7 @@ export async function updatePromotion(
   id: string,
   formData: FormData,
 ): Promise<PromotionActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parsePromotion(formData);
   if ("ok" in parsed) return parsed;
@@ -267,6 +305,17 @@ export async function updatePromotion(
     .returning({ id: promotions.id });
 
   if (!updated) return { ok: false, error: "Promotion not found." };
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "discount.promotion_updated",
+    entityType: "promotion",
+    entityId: id,
+    metadata: {
+      name: parsed.name,
+      ruleType: parsed.ruleType,
+      active: parsed.active,
+    },
+  });
 
   revalidatePath("/admin/coupons");
 
@@ -274,7 +323,7 @@ export async function updatePromotion(
 }
 
 export async function deletePromotion(id: string): Promise<ActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const [deleted] = await db
     .delete(promotions)
@@ -282,6 +331,12 @@ export async function deletePromotion(id: string): Promise<ActionResult> {
     .returning({ id: promotions.id });
 
   if (!deleted) return { ok: false, error: "Promotion not found." };
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "discount.promotion_deleted",
+    entityType: "promotion",
+    entityId: id,
+  });
 
   revalidatePath("/admin/coupons");
 

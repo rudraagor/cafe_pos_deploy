@@ -9,7 +9,13 @@ import {
   products,
   users,
 } from "@/lib/db/schema";
-import type { ReportFilters, ReportRange } from "./range";
+import { aggregateTrendByBucket } from "@/lib/reports/buckets";
+import {
+  resolveChartBucket,
+  type ReportDataBounds,
+  type ReportFilters,
+  type ReportRange,
+} from "./range";
 
 function paidOrdersWhere(filters: ReportRange | ReportFilters) {
   const conditions = [
@@ -349,6 +355,10 @@ export async function getTopOrders(
   }));
 }
 
+function trendBucket(filters: ReportRange | ReportFilters) {
+  return resolveChartBucket(filters);
+}
+
 export async function getExtendedReportDashboard(
   filters: ReportRange | ReportFilters,
 ) {
@@ -356,7 +366,7 @@ export async function getExtendedReportDashboard(
     summary,
     comparison,
     itemsSold,
-    revenueByDay,
+    revenueByDayRaw,
     salesByHour,
     topProducts,
     salesByCategory,
@@ -383,6 +393,13 @@ export async function getExtendedReportDashboard(
     getDiscountBreakdown(filters),
     getSalesByDayOfWeek(filters),
   ]);
+
+  const revenueByDay = aggregateTrendByBucket(
+    revenueByDayRaw,
+    trendBucket(filters),
+    filters.start,
+    filters.end,
+  );
 
   return {
     summary,
@@ -422,8 +439,49 @@ export async function getReportDashboard(filters: ReportRange | ReportFilters) {
   };
 }
 
+export async function getReportDataBounds(): Promise<ReportDataBounds> {
+  const [boundsRow] = await db
+    .select({
+      minDate: sql<string | null>`min(${orders.updatedAt})::text`,
+      maxDate: sql<string | null>`max(${orders.updatedAt})::text`,
+    })
+    .from(orders)
+    .where(eq(orders.status, "paid"));
+
+  const yearRows = await db
+    .select({
+      year: sql<number>`extract(year from ${orders.updatedAt})::int`,
+    })
+    .from(orders)
+    .where(eq(orders.status, "paid"))
+    .groupBy(sql`extract(year from ${orders.updatedAt})`)
+    .orderBy(sql`extract(year from ${orders.updatedAt}) desc`);
+
+  const minDate = boundsRow?.minDate
+    ? formatDateFromTimestamp(boundsRow.minDate)
+    : null;
+  const maxDate = boundsRow?.maxDate
+    ? formatDateFromTimestamp(boundsRow.maxDate)
+    : null;
+
+  return {
+    minDate,
+    maxDate,
+    yearsWithData: yearRows.map((row) => row.year),
+  };
+}
+
+function formatDateFromTimestamp(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export async function getReportFilterOptions() {
-  const [employees, sessions, productRows] = await Promise.all([
+  const [employees, sessions, productRows, dataBounds] = await Promise.all([
     db.query.users.findMany({
       orderBy: (user, { asc }) => [asc(user.name)],
     }),
@@ -437,6 +495,7 @@ export async function getReportFilterOptions() {
     db.query.products.findMany({
       orderBy: (product, { asc }) => [asc(product.name)],
     }),
+    getReportDataBounds(),
   ]);
 
   return {
@@ -454,6 +513,7 @@ export async function getReportFilterOptions() {
       id: product.id,
       label: product.name,
     })),
+    dataBounds,
   };
 }
 

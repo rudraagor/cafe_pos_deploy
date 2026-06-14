@@ -43,6 +43,13 @@ export type TableOccupancy =
       durationMinutes: number;
     };
 
+export type UpcomingTableReservation = {
+  reservationId: string;
+  customerName: string;
+  startAt: string;
+  durationMinutes: number;
+};
+
 export async function getActiveProducts() {
   return db
     .select({
@@ -86,15 +93,15 @@ export async function getActivePromotions(): Promise<PromotionInput[]> {
     stackable: row.stackable,
     ruleType: row.ruleType,
     ruleConfig: normalizePromotionConfig(row.ruleConfig),
-    daysOfWeek: Array.isArray(row.daysOfWeek)
-      ? row.daysOfWeek.map(Number)
-      : [],
+    daysOfWeek: Array.isArray(row.daysOfWeek) ? row.daysOfWeek.map(Number) : [],
     startTime: row.startTime,
     endTime: row.endTime,
   }));
 }
 
-function normalizePromotionConfig(value: unknown): PromotionInput["ruleConfig"] {
+function normalizePromotionConfig(
+  value: unknown,
+): PromotionInput["ruleConfig"] {
   if (!value || typeof value !== "object") return {};
   const config = value as Record<string, unknown>;
   return {
@@ -144,6 +151,7 @@ export async function getActiveTableOccupancies(sessionId: string) {
       eq(orders.sessionId, sessionId),
       eq(orders.fulfillmentType, "dine_in"),
       ne(orders.status, "cancelled"),
+      ne(orders.status, "unapproved"),
       sql`not (${orders.status} = 'paid' and ${orders.kdsStage} = 'completed')`,
     ),
     with: {
@@ -161,7 +169,9 @@ export async function getActiveTableOccupancies(sessionId: string) {
             .slice()
             .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
             .map((row) => row.table)
-            .filter((table): table is NonNullable<typeof table> => Boolean(table))
+            .filter((table): table is NonNullable<typeof table> =>
+              Boolean(table),
+            )
         : order.table
           ? [order.table]
           : [];
@@ -217,6 +227,40 @@ export async function getActiveTableOccupancies(sessionId: string) {
     };
     for (const table of linkedTables) {
       if (!map.has(table.id)) map.set(table.id, occupancy);
+    }
+  }
+
+  return map;
+}
+
+export async function getUpcomingTableReservations(horizonMinutes = 120) {
+  await expireStaleReservations();
+
+  const now = new Date();
+  const horizonEnd = new Date(now.getTime() + horizonMinutes * 60 * 1000);
+  const upcoming = await db.query.reservations.findMany({
+    where: and(
+      eq(reservations.status, "booked"),
+      isNull(reservations.linkedOrderId),
+      sql`${reservations.startAt} > ${now}`,
+      sql`${reservations.startAt} <= ${horizonEnd}`,
+    ),
+    with: {
+      reservationTables: true,
+    },
+    orderBy: (reservation, { asc }) => [asc(reservation.startAt)],
+  });
+
+  const map = new Map<string, UpcomingTableReservation>();
+  for (const reservation of upcoming) {
+    const warning: UpcomingTableReservation = {
+      reservationId: reservation.id,
+      customerName: reservation.customerName,
+      startAt: reservation.startAt.toISOString(),
+      durationMinutes: reservation.durationMinutes,
+    };
+    for (const row of reservation.reservationTables) {
+      if (!map.has(row.tableId)) map.set(row.tableId, warning);
     }
   }
 
@@ -327,6 +371,7 @@ export async function getOrderForReceipt(orderId: string) {
 export async function getKitchenTickets() {
   const rows = await db.query.orders.findMany({
     where: and(
+      ne(orders.status, "unapproved"),
       ne(orders.status, "cancelled"),
       sql`(
         ${orders.kdsStage} in ('to_cook', 'preparing')
@@ -380,6 +425,71 @@ export async function getProductsByIds(ids: string[]) {
   });
 }
 
+export type CustomerUsualProduct = {
+  productId: string;
+  name: string;
+  price: string;
+  taxRate: string;
+  isKitchenItem: boolean;
+  isOutOfStock: boolean;
+  categoryId: string | null;
+  categoryColor: string | null;
+  timesOrdered: number;
+};
+
+/** Most frequently ordered active product for a customer (paid orders, all time). */
+export async function getCustomerUsualProduct(customerId: string) {
+  const [row] = await db
+    .select({
+      productId: orderItems.productId,
+      timesOrdered: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(
+      and(
+        eq(orders.customerId, customerId),
+        eq(orders.status, "paid"),
+        sql`${orderItems.productId} is not null`,
+      ),
+    )
+    .groupBy(orderItems.productId)
+    .orderBy(desc(sql`sum(${orderItems.quantity})`))
+    .limit(1);
+
+  if (!row?.productId) return null;
+
+  const [product] = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      price: products.price,
+      taxRate: products.taxRate,
+      isKitchenItem: products.isKitchenItem,
+      isOutOfStock: products.isOutOfStock,
+      categoryId: products.categoryId,
+      categoryColor: categories.color,
+    })
+    .from(products)
+    .leftJoin(categories, eq(products.categoryId, categories.id))
+    .where(and(eq(products.id, row.productId), isNull(products.archivedAt)))
+    .limit(1);
+
+  if (!product) return null;
+
+  return {
+    productId: product.id,
+    name: product.name,
+    price: product.price,
+    taxRate: product.taxRate,
+    isKitchenItem: product.isKitchenItem,
+    isOutOfStock: product.isOutOfStock,
+    categoryId: product.categoryId,
+    categoryColor: product.categoryColor,
+    timesOrdered: row.timesOrdered,
+  } satisfies CustomerUsualProduct;
+}
+
 /** Next order number for today. Globally unique (not per-session). */
 export async function generateOrderNumber(tx: DbClient = db) {
   const today = new Date();
@@ -389,7 +499,9 @@ export async function generateOrderNumber(tx: DbClient = db) {
 
   const [row] = await tx
     .select({
-      maxSuffix: sql<number | null>`max(nullif(substring(${orders.orderNumber} from ${sql.raw(String(suffixStart))}), '')::int)`,
+      maxSuffix: sql<
+        number | null
+      >`max(nullif(substring(${orders.orderNumber} from ${sql.raw(String(suffixStart))}), '')::int)`,
     })
     .from(orders)
     .where(sql`${orders.orderNumber} like ${prefix + "%"}`);

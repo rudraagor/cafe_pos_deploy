@@ -1,4 +1,5 @@
 import { CartStoreHydration } from "@/components/pos/cart-store-hydration";
+import { OfflineKitchenSync } from "@/components/pos/offline-kitchen-sync";
 import { OrderView } from "@/components/pos/order-view";
 import { SessionScreen } from "@/components/pos/session-screen";
 import { requireUser } from "@/lib/auth";
@@ -38,6 +39,7 @@ export default async function TakeawayPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <CartStoreHydration />
+      <OfflineKitchenSync />
       <OrderView
         tableId={null}
         fulfillmentType="takeaway"

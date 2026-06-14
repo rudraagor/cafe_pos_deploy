@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
+import { writeAuditLog } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -26,22 +27,25 @@ import {
   findCouponByCode,
   generateOrderNumber,
   getActivePromotions,
+  getCustomerUsualProduct,
   getProductsByIds,
 } from "@/lib/pos/queries";
 import {
   getLastClosedSession,
   getOpenSessionForUser,
   getSessionClosingAmount,
+  getSessionExpectedCash,
 } from "@/lib/pos/session";
 import { getAppUrl } from "@/lib/receipt-brand";
-import { publishKdsChanged, publishReportsChanged } from "@/lib/realtime/publish";
 import {
-  modifiersAllowNote,
-  normalizeModifiers,
-} from "@/lib/pos/modifiers";
+  publishKdsChanged,
+  publishReportsChanged,
+} from "@/lib/realtime/publish";
+import { checkRateLimit } from "@/lib/security/rate-limit";
+import { modifiersAllowNote, normalizeModifiers } from "@/lib/pos/modifiers";
 import { customerSchema } from "@/lib/validations/customers";
 import { sendToKitchenSchema } from "@/lib/validations/order";
-import { paymentSchema } from "@/lib/validations/payment";
+import { paymentSchema, splitPaymentSchema } from "@/lib/validations/payment";
 
 export type SessionInfo = {
   openSession: Awaited<ReturnType<typeof getOpenSessionForUser>>;
@@ -87,22 +91,39 @@ export type CloseSessionResult = ActionResult & {
   summary?: {
     totalOrders: number;
     closingAmount: number;
+    expectedCash: number;
+    countedCash: number;
+    cashVariance: number;
     openedAt: Date;
     closedAt: Date;
   };
 };
 
-export async function closeSession(): Promise<CloseSessionResult> {
+export async function closeSession(
+  payload?: unknown,
+): Promise<CloseSessionResult> {
   const user = await requireUser();
   const session = await getOpenSessionForUser(user.id);
   if (!session) {
     return { ok: false, error: "No open session found." };
   }
 
-  const closingAmount = await getSessionClosingAmount(session.id);
-  const sessionOrders = await db.query.orders.findMany({
-    where: eq(orders.sessionId, session.id),
-  });
+  const countedCash =
+    typeof payload === "object" && payload !== null && "countedCash" in payload
+      ? Number((payload as { countedCash?: unknown }).countedCash)
+      : NaN;
+  if (!Number.isFinite(countedCash) || countedCash < 0) {
+    return { ok: false, error: "Enter the physical cash counted in drawer." };
+  }
+
+  const [closingAmount, expectedCash, sessionOrders] = await Promise.all([
+    getSessionClosingAmount(session.id),
+    getSessionExpectedCash(session.id),
+    db.query.orders.findMany({
+      where: eq(orders.sessionId, session.id),
+    }),
+  ]);
+  const cashVariance = countedCash - expectedCash;
 
   const closedAt = new Date();
   await db
@@ -111,8 +132,24 @@ export async function closeSession(): Promise<CloseSessionResult> {
       status: "closed",
       closedAt,
       closingAmount: closingAmount.toFixed(2),
+      expectedCash: expectedCash.toFixed(2),
+      countedCash: countedCash.toFixed(2),
+      cashVariance: cashVariance.toFixed(2),
     })
     .where(eq(posSessions.id, session.id));
+  await writeAuditLog({
+    actorId: user.id,
+    action: "pos_session.closed",
+    entityType: "pos_session",
+    entityId: session.id,
+    metadata: {
+      closingAmount,
+      expectedCash,
+      countedCash,
+      cashVariance,
+      totalOrders: sessionOrders.length,
+    },
+  });
 
   revalidatePath("/pos");
   revalidatePath("/pos/orders");
@@ -126,15 +163,16 @@ export async function closeSession(): Promise<CloseSessionResult> {
     summary: {
       totalOrders: sessionOrders.length,
       closingAmount,
+      expectedCash,
+      countedCash,
+      cashVariance,
       openedAt: session.openedAt,
       closedAt,
     },
   };
 }
 
-export async function validateCoupon(
-  code: string,
-): Promise<
+export async function validateCoupon(code: string): Promise<
   | {
       ok: true;
       coupon: {
@@ -147,7 +185,16 @@ export async function validateCoupon(
     }
   | { ok: false; error: string }
 > {
-  await requireUser();
+  const user = await requireUser();
+  const limit = checkRateLimit({
+    scope: "pos:coupon_validate",
+    identifier: user.id,
+    limit: 60,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) {
+    return { ok: false, error: "Coupon checks are rate limited." };
+  }
 
   const coupon = await findCouponByCode(code);
   if (!coupon) {
@@ -195,7 +242,9 @@ export async function sendToKitchen(
   } = parsed.data;
   const selectedTableIds =
     fulfillmentType === "dine_in"
-      ? Array.from(new Set(tableIds?.length ? tableIds : tableId ? [tableId] : []))
+      ? Array.from(
+          new Set(tableIds?.length ? tableIds : tableId ? [tableId] : []),
+        )
       : [];
   const primaryTableId = selectedTableIds[0] ?? null;
 
@@ -223,7 +272,10 @@ export async function sendToKitchen(
   });
   const hasMissingProduct = pricingItems.some((item) => item === null);
   if (hasMissingProduct) {
-    return { ok: false, error: "One of the selected products no longer exists." };
+    return {
+      ok: false,
+      error: "One of the selected products no longer exists.",
+    };
   }
   const validPricingItems = pricingItems.filter(
     (item): item is NonNullable<(typeof pricingItems)[number]> => item !== null,
@@ -301,83 +353,112 @@ export async function sendToKitchen(
   const attempts = orderId ? 1 : 3;
 
   try {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      savedOrderId = await db.transaction(async (tx) => {
-        let effectiveCustomerId = customerId ?? null;
-        if (reservationId && !effectiveCustomerId) {
-          const reservation = await tx.query.reservations.findFirst({
-            where: eq(reservations.id, reservationId),
-          });
-          if (reservation) {
-            const existingCustomer = await tx.query.customers.findFirst({
-              where: eq(customers.email, reservation.customerEmail),
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        savedOrderId = await db.transaction(async (tx) => {
+          let effectiveCustomerId = customerId ?? null;
+          if (reservationId && !effectiveCustomerId) {
+            const reservation = await tx.query.reservations.findFirst({
+              where: eq(reservations.id, reservationId),
             });
-            if (existingCustomer) {
-              effectiveCustomerId = existingCustomer.id;
-            } else {
-              const [createdCustomer] = await tx
-                .insert(customers)
-                .values({
-                  name: reservation.customerName,
-                  email: reservation.customerEmail,
-                  phone: reservation.customerPhone,
-                })
-                .returning({ id: customers.id });
-              effectiveCustomerId = createdCustomer.id;
+            if (reservation) {
+              const existingCustomer = await tx.query.customers.findFirst({
+                where: eq(customers.email, reservation.customerEmail),
+              });
+              if (existingCustomer) {
+                effectiveCustomerId = existingCustomer.id;
+              } else {
+                const [createdCustomer] = await tx
+                  .insert(customers)
+                  .values({
+                    name: reservation.customerName,
+                    email: reservation.customerEmail,
+                    phone: reservation.customerPhone,
+                  })
+                  .returning({ id: customers.id });
+                effectiveCustomerId = createdCustomer.id;
+              }
             }
           }
-        }
 
-        await expireStaleReservations(tx);
+          await expireStaleReservations(tx);
 
-        if (fulfillmentType === "dine_in" && selectedTableIds.length > 0) {
-          const conflictingOrder = await findActiveOrderTableConflict({
-            tableIds: selectedTableIds,
-            sessionId: session.id,
-            excludeOrderId: orderId,
-            client: tx,
-          });
-          if (conflictingOrder) {
-            throw new Error("TABLE_OCCUPIED");
-          }
-          const conflictingReservation = await findReservationTableConflict({
-            tableIds: selectedTableIds,
-            startAt: new Date(),
-            durationMinutes: 1,
-            excludeReservationId: reservationId,
-            client: tx,
-          });
-          if (conflictingReservation) {
-            throw new Error("TABLE_RESERVED");
-          }
-        }
-
-        if (orderId) {
-          const existing = await tx.query.orders.findFirst({
-            where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
-          });
-          if (!existing) {
-            return null;
+          if (fulfillmentType === "dine_in" && selectedTableIds.length > 0) {
+            const conflictingOrder = await findActiveOrderTableConflict({
+              tableIds: selectedTableIds,
+              sessionId: session.id,
+              excludeOrderId: orderId,
+              client: tx,
+            });
+            if (conflictingOrder) {
+              throw new Error("TABLE_OCCUPIED");
+            }
+            const conflictingReservation = await findReservationTableConflict({
+              tableIds: selectedTableIds,
+              startAt: new Date(),
+              durationMinutes: 1,
+              excludeReservationId: reservationId,
+              client: tx,
+            });
+            if (conflictingReservation) {
+              throw new Error("TABLE_RESERVED");
+            }
           }
 
-          await tx.delete(orderItems).where(eq(orderItems.orderId, orderId));
-          await tx
-            .delete(orderTables)
-            .where(eq(orderTables.orderId, orderId));
-          await tx
-            .update(orders)
-            .set({
+          if (orderId) {
+            const existing = await tx.query.orders.findFirst({
+              where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
+            });
+            if (!existing) {
+              return null;
+            }
+
+            await tx.delete(orderItems).where(eq(orderItems.orderId, orderId));
+            await tx
+              .delete(orderTables)
+              .where(eq(orderTables.orderId, orderId));
+            await tx
+              .update(orders)
+              .set({
+                ...orderValues,
+                customerId: effectiveCustomerId,
+                kdsStage: existing.kdsStage,
+              })
+              .where(eq(orders.id, orderId));
+            await tx.insert(orderItems).values(itemValues(orderId));
+            if (fulfillmentType === "dine_in" && selectedTableIds.length > 0) {
+              await tx.insert(orderTables).values(
+                selectedTableIds.map((linkedTableId, index) => ({
+                  orderId,
+                  tableId: linkedTableId,
+                  isPrimary: index === 0,
+                })),
+              );
+            }
+            if (reservationId) {
+              await tx
+                .update(reservations)
+                .set({ status: "seated", linkedOrderId: orderId })
+                .where(eq(reservations.id, reservationId));
+            }
+            return orderId;
+          }
+
+          const orderNumber = await generateOrderNumber(tx);
+          const [created] = await tx
+            .insert(orders)
+            .values({
               ...orderValues,
               customerId: effectiveCustomerId,
-              kdsStage: existing.kdsStage,
+              kdsStage: "to_cook",
+              orderNumber,
             })
-            .where(eq(orders.id, orderId));
-          await tx.insert(orderItems).values(itemValues(orderId));
+            .returning({ id: orders.id });
+          await tx.insert(orderItems).values(itemValues(created.id));
           if (fulfillmentType === "dine_in" && selectedTableIds.length > 0) {
             await tx.insert(orderTables).values(
               selectedTableIds.map((linkedTableId, index) => ({
-                orderId,
+                orderId: created.id,
                 tableId: linkedTableId,
                 isPrimary: index === 0,
               })),
@@ -386,66 +467,37 @@ export async function sendToKitchen(
           if (reservationId) {
             await tx
               .update(reservations)
-              .set({ status: "seated", linkedOrderId: orderId })
+              .set({ status: "seated", linkedOrderId: created.id })
               .where(eq(reservations.id, reservationId));
           }
-          return orderId;
+          return created.id;
+        });
+        break;
+      } catch (error) {
+        lastCreateError = error;
+        if (error instanceof Error && error.message === "TABLE_OCCUPIED") {
+          return {
+            ok: false,
+            error: "One of these tables already has an active order.",
+          };
         }
-
-        const orderNumber = await generateOrderNumber(tx);
-        const [created] = await tx
-          .insert(orders)
-          .values({
-            ...orderValues,
-            customerId: effectiveCustomerId,
-            kdsStage: "to_cook",
-            orderNumber,
-          })
-          .returning({ id: orders.id });
-        await tx.insert(orderItems).values(itemValues(created.id));
-        if (fulfillmentType === "dine_in" && selectedTableIds.length > 0) {
-          await tx.insert(orderTables).values(
-            selectedTableIds.map((linkedTableId, index) => ({
-              orderId: created.id,
-              tableId: linkedTableId,
-              isPrimary: index === 0,
-            })),
-          );
+        if (error instanceof Error && error.message === "TABLE_RESERVED") {
+          return {
+            ok: false,
+            error: "One of these tables is reserved right now.",
+          };
         }
-        if (reservationId) {
-          await tx
-            .update(reservations)
-            .set({ status: "seated", linkedOrderId: created.id })
-            .where(eq(reservations.id, reservationId));
+        if (orderId || !isUniqueViolation(error)) {
+          return {
+            ok: false,
+            error: actionErrorMessage(
+              error,
+              "Could not save the order. Please try again.",
+            ),
+          };
         }
-        return created.id;
-      });
-      break;
-    } catch (error) {
-      lastCreateError = error;
-      if (error instanceof Error && error.message === "TABLE_OCCUPIED") {
-        return {
-          ok: false,
-          error: "One of these tables already has an active order.",
-        };
-      }
-      if (error instanceof Error && error.message === "TABLE_RESERVED") {
-        return {
-          ok: false,
-          error: "One of these tables is reserved right now.",
-        };
-      }
-      if (orderId || !isUniqueViolation(error)) {
-        return {
-          ok: false,
-          error: actionErrorMessage(
-            error,
-            "Could not save the order. Please try again.",
-          ),
-        };
       }
     }
-  }
   } catch (error) {
     if (error instanceof Error && error.message === "TABLE_OCCUPIED") {
       return {
@@ -486,6 +538,19 @@ export async function sendToKitchen(
   revalidatePath("/pos/tables");
   revalidatePath("/kds");
   publishKdsChanged({ orderId: savedOrderId });
+  if (coupon) {
+    await writeAuditLog({
+      actorId: user.id,
+      action: "discount.applied",
+      entityType: "order",
+      entityId: savedOrderId,
+      metadata: {
+        couponCode: coupon.code,
+        discountType: coupon.discountType,
+        value: coupon.value,
+      },
+    });
+  }
 
   return {
     ok: true,
@@ -518,7 +583,7 @@ function actionErrorMessage(error: unknown, fallback: string) {
 }
 
 export async function deleteDraftOrder(id: string): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, id), eq(orders.status, "draft")),
@@ -534,6 +599,16 @@ export async function deleteDraftOrder(id: string): Promise<ActionResult> {
   revalidatePath("/pos/tables");
   revalidatePath("/kds");
   publishKdsChanged({ orderId: id });
+  await writeAuditLog({
+    actorId: user.id,
+    action: "order.draft_deleted",
+    entityType: "order",
+    entityId: id,
+    metadata: {
+      orderNumber: order.orderNumber,
+      total: Number(order.total),
+    },
+  });
 
   return { ok: true, message: "Order deleted." };
 }
@@ -550,7 +625,7 @@ export type TakePaymentResult = ActionResult<
 export async function takePayment(
   payload: unknown,
 ): Promise<TakePaymentResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const parsed = paymentSchema.safeParse(payload);
   if (!parsed.success) {
@@ -562,19 +637,73 @@ export async function takePayment(
   }
 
   const { orderId, method, tendered, reference } = parsed.data;
-  const methodConfig = await db.query.paymentMethods.findFirst({
-    where: and(eq(paymentMethods.type, method), eq(paymentMethods.enabled, true)),
+  return recordSplitPayment(user.id, {
+    orderId,
+    payments: [
+      {
+        method,
+        amount: 0,
+        tendered,
+        reference,
+      },
+    ],
   });
-  if (!methodConfig) {
-    return { ok: false, error: "This payment method is not enabled." };
+}
+
+export async function takeSplitPayment(
+  payload: unknown,
+): Promise<TakePaymentResult> {
+  const user = await requireUser();
+
+  const parsed = splitPaymentSchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.errors[0]?.message ?? "Invalid payment details.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
   }
-  if (method === "upi" && !methodConfig.upiId?.trim()) {
-    return { ok: false, error: "UPI is enabled but no UPI ID is configured." };
+
+  return recordSplitPayment(user.id, parsed.data);
+}
+
+async function recordSplitPayment(
+  actorId: string,
+  payload: {
+    orderId: string;
+    payments: {
+      method: "cash" | "card" | "upi";
+      amount: number;
+      tendered?: number;
+      reference?: string;
+    }[];
+  },
+): Promise<TakePaymentResult> {
+  const methodConfigs = await db.query.paymentMethods.findMany({
+    where: eq(paymentMethods.enabled, true),
+  });
+  const methodConfigByType = new Map(
+    methodConfigs.map((config) => [config.type, config]),
+  );
+  for (const payment of payload.payments) {
+    const methodConfig = methodConfigByType.get(payment.method);
+    if (!methodConfig) {
+      return {
+        ok: false,
+        error: `${payment.method.toUpperCase()} is not enabled.`,
+      };
+    }
+    if (payment.method === "upi" && !methodConfig.upiId?.trim()) {
+      return {
+        ok: false,
+        error: "UPI is enabled but no UPI ID is configured.",
+      };
+    }
   }
 
   const paymentResult = await db.transaction(async (tx) => {
     const order = await tx.query.orders.findFirst({
-      where: and(eq(orders.id, orderId), eq(orders.status, "draft")),
+      where: and(eq(orders.id, payload.orderId), eq(orders.status, "draft")),
       with: { customer: true, items: true },
     });
     if (!order) {
@@ -595,31 +724,59 @@ export async function takePayment(
     }
 
     const total = Number(order.total);
-    if (method === "cash" && (tendered == null || tendered < total)) {
+    const effectivePayments = payload.payments.map((payment) => ({
+      ...payment,
+      amount: payment.amount > 0 ? payment.amount : total,
+    }));
+    const paidTotal = roundMoney(
+      effectivePayments.reduce((sum, payment) => sum + payment.amount, 0),
+    );
+    if (Math.abs(paidTotal - total) > 0.009) {
       return {
         ok: false as const,
-        error: "Tendered cash must cover the order total.",
-        fieldErrors: {
-          tendered: ["Tendered cash must cover the order total."],
-        },
+        error: "Split payments must add up to the order total.",
       };
     }
 
-    const changeDue = method === "cash" ? (tendered ?? 0) - total : null;
-    const paymentReference =
-      method === "cash"
-        ? tendered == null
-          ? null
-          : `Tendered ${tendered.toFixed(2)}`
-        : reference || (method === "upi" ? methodConfig.upiId : null);
+    for (const payment of effectivePayments) {
+      if (
+        payment.method === "cash" &&
+        (payment.tendered == null || payment.tendered < payment.amount)
+      ) {
+        return {
+          ok: false as const,
+          error: "Tendered cash must cover the cash payment amount.",
+          fieldErrors: {
+            tendered: ["Tendered cash must cover the cash payment amount."],
+          },
+        };
+      }
+    }
 
-    await tx.insert(payments).values({
-      orderId: order.id,
-      method,
-      amount: total.toFixed(2),
-      changeDue: changeDue == null ? null : changeDue.toFixed(2),
-      reference: paymentReference,
-    });
+    await tx.insert(payments).values(
+      effectivePayments.map((payment) => {
+        const methodConfig = methodConfigByType.get(payment.method);
+        const changeDue =
+          payment.method === "cash"
+            ? (payment.tendered ?? 0) - payment.amount
+            : null;
+        const paymentReference =
+          payment.method === "cash"
+            ? payment.tendered == null
+              ? null
+              : `Tendered ${payment.tendered.toFixed(2)}`
+            : payment.reference ||
+              (payment.method === "upi" ? methodConfig?.upiId : null);
+
+        return {
+          orderId: order.id,
+          method: payment.method,
+          amount: payment.amount.toFixed(2),
+          changeDue: changeDue == null ? null : changeDue.toFixed(2),
+          reference: paymentReference,
+        };
+      }),
+    );
 
     await tx
       .update(orders)
@@ -633,6 +790,10 @@ export async function takePayment(
       ok: true as const,
       orderId: order.id,
       customerEmail: order.customer?.email ?? null,
+      payments: effectivePayments.map((payment) => ({
+        method: payment.method,
+        amount: payment.amount,
+      })),
     };
   });
 
@@ -648,17 +809,25 @@ export async function takePayment(
   revalidatePath("/kds");
   publishKdsChanged({ orderId: paymentResult.orderId });
   publishReportsChanged({ orderId: paymentResult.orderId });
+  await writeAuditLog({
+    actorId,
+    action: "order.payment_recorded",
+    entityType: "order",
+    entityId: paymentResult.orderId,
+    metadata: {
+      payments: paymentResult.payments,
+    },
+  });
 
   const receiptUrl = `${getAppUrl()}/receipt/${paymentResult.orderId}`;
   const email = await sendReceiptEmail(paymentResult.orderId);
   const emailSkipped = email.ok && email.skipped === true;
   const emailSent = email.ok && !emailSkipped;
-  const emailMessage =
-    emailSkipped
-      ? email.reason
-      : email.ok
-        ? "Receipt emailed."
-        : email.error;
+  const emailMessage = emailSkipped
+    ? email.reason
+    : email.ok
+      ? "Receipt emailed."
+      : email.error;
 
   return {
     ok: true,
@@ -670,10 +839,21 @@ export async function takePayment(
   };
 }
 
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 export async function resendReceipt(
   orderId: string,
 ): Promise<ActionResult & { emailSent?: boolean }> {
-  await requireUser();
+  const user = await requireUser();
+  const limit = checkRateLimit({
+    scope: "pos:receipt_resend",
+    identifier: `${user.id}:${orderId}`,
+    limit: 5,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.ok) return { ok: false, error: "Receipt resend is rate limited." };
 
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, orderId), eq(orders.status, "paid")),
@@ -722,14 +902,11 @@ export async function createCustomer(
     };
   }
 
-  const [created] = await db
-    .insert(customers)
-    .values(parsed.data)
-    .returning({
-      id: customers.id,
-      name: customers.name,
-      email: customers.email,
-    });
+  const [created] = await db.insert(customers).values(parsed.data).returning({
+    id: customers.id,
+    name: customers.name,
+    email: customers.email,
+  });
 
   revalidatePath("/pos/customers");
   revalidatePath("/pos");
@@ -771,6 +948,29 @@ export async function updateCustomer(
 
   revalidatePath("/pos/customers");
   return { ok: true, message: "Customer updated." };
+}
+
+export async function fetchCustomerUsual(customerId: string) {
+  await requireUser();
+  if (!customerId) {
+    return { ok: false as const, error: "Select a customer first." };
+  }
+
+  const usual = await getCustomerUsualProduct(customerId);
+  if (!usual) {
+    return {
+      ok: false as const,
+      error: "No past orders found for this customer yet.",
+    };
+  }
+  if (usual.isOutOfStock) {
+    return {
+      ok: false as const,
+      error: `${usual.name} is out of stock right now.`,
+    };
+  }
+
+  return { ok: true as const, usual };
 }
 
 export async function deleteCustomer(id: string): Promise<ActionResult> {

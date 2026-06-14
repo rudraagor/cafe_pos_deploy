@@ -1,7 +1,12 @@
 "use client";
 
+import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { TableOccupancy } from "@/lib/pos/queries";
+import { TableQrButton } from "@/components/pos/table-qr-button";
+import type {
+  TableOccupancy,
+  UpcomingTableReservation,
+} from "@/lib/pos/queries";
 import { useKdsStream } from "@/lib/realtime/use-kds-stream";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +25,7 @@ type TableGridProps = {
   floors: FloorWithTables[];
   occupiedTableIds: string[];
   occupiedOrdersByTable?: Record<string, TableOccupancy>;
+  upcomingReservationsByTable?: Record<string, UpcomingTableReservation>;
   onSelectTable?: (tableId: string) => void;
   selectedTableIds?: string[];
   onToggleTable?: (tableId: string) => void;
@@ -30,6 +36,7 @@ export function TableGrid({
   floors,
   occupiedTableIds,
   occupiedOrdersByTable = {},
+  upcomingReservationsByTable = {},
   onSelectTable,
   selectedTableIds = [],
   onToggleTable,
@@ -80,46 +87,65 @@ export function TableGrid({
             {floor.tables.map((table) => {
               const isOccupied = occupied.has(table.id);
               const occupancy = occupiedOrdersByTable[table.id];
+              const upcomingReservation = upcomingReservationsByTable[table.id];
               const isSelected = selected.has(table.id);
               return (
-                <button
-                  key={table.id}
-                  type="button"
-                  onClick={() => handleSelect(table.id)}
-                  className={cn(
-                    "flex flex-col items-center justify-center rounded-lg border-2 p-4 transition-colors",
-                    isOccupied
-                      ? occupancy?.kind === "reservation"
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-                        : "border-amber-500 bg-amber-50 dark:bg-amber-950/30"
-                      : isSelected
-                        ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary hover:bg-muted/50",
-                  )}
-                >
-                  <span className="text-2xl font-bold">{table.number}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {table.seats} seats
-                  </span>
-                  {isOccupied ? (
-                    <span
-                      className={cn(
-                        "mt-1 text-[10px] font-medium",
-                        occupancy?.kind === "reservation"
-                          ? "text-blue-600"
-                          : "text-amber-600",
-                      )}
-                    >
-                      {occupancy?.kind === "reservation"
-                        ? `Reserved: ${occupancy.customerName}`
-                        : "View order"}
+                <div key={table.id} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(table.id)}
+                    className={cn(
+                      "flex w-full flex-col items-center justify-center rounded-lg border-2 p-4 transition-colors",
+                      isOccupied
+                        ? occupancy?.kind === "reservation"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+                          : "border-amber-500 bg-amber-50 dark:bg-amber-950/30"
+                        : isSelected
+                          ? "border-primary bg-primary/10"
+                          : upcomingReservation
+                            ? "border-yellow-500 bg-yellow-50 hover:border-yellow-600 dark:bg-yellow-950/30"
+                            : "border-border hover:border-primary hover:bg-muted/50",
+                    )}
+                  >
+                    <span className="text-2xl font-bold">{table.number}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {table.seats} seats
                     </span>
-                  ) : isSelected ? (
-                    <span className="text-primary mt-1 text-[10px] font-medium">
-                      Selected
-                    </span>
+                    {isOccupied ? (
+                      <span
+                        className={cn(
+                          "mt-1 text-[10px] font-medium",
+                          occupancy?.kind === "reservation"
+                            ? "text-blue-600"
+                            : "text-amber-600",
+                        )}
+                      >
+                        {occupancy?.kind === "reservation"
+                          ? `Reserved: ${occupancy.customerName}`
+                          : "View order"}
+                      </span>
+                    ) : isSelected ? (
+                      <span className="text-primary mt-1 text-[10px] font-medium">
+                        Selected
+                      </span>
+                    ) : null}
+                    {upcomingReservation ? (
+                      <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-yellow-700 dark:text-yellow-300">
+                        <CalendarClock className="size-3" />
+                        Reserved{" "}
+                        {formatReservationTime(upcomingReservation.startAt)}
+                      </span>
+                    ) : null}
+                  </button>
+                  {table.active ? (
+                    <TableQrButton
+                      tableId={table.id}
+                      tableNumber={table.number}
+                      className="absolute top-2 right-2 print:hidden"
+                      onClick={(event) => event.stopPropagation()}
+                    />
                   ) : null}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -127,4 +153,13 @@ export function TableGrid({
       ))}
     </div>
   );
+}
+
+function formatReservationTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value));
 }

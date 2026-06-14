@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { DirectGrabBadge } from "@/components/pos/direct-grab-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -208,6 +209,10 @@ export function ProductGrid({
               {outOfStock ? (
                 <span className="mt-2 rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 uppercase">
                   Out of stock
+                </span>
+              ) : !product.isKitchenItem ? (
+                <span className="mt-2">
+                  <DirectGrabBadge />
                 </span>
               ) : normalizeModifiers(product.supportedModifiers).length > 0 ? (
                 <span className="mt-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">

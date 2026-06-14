@@ -43,6 +43,20 @@
       "when": 1781374777181,
       "tag": "0005_warm_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781440200000,
+      "tag": "0006_blind_cash_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781454600000,
+      "tag": "0007_qr_guest_orders",
+      "breakpoints": true
     }
   ]
 }

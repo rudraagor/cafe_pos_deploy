@@ -16,12 +16,14 @@ export type SeedProduct = {
 
 export type SeedContext = {
   products: SeedProduct[];
+  productWeights?: Map<string, number>;
   tableIds: string[];
   employeeIds: string[];
   customerIds: string[];
-  coupon: CouponInput | null;
+  coupons: CouponInput[];
   promotions: PromotionInput[];
   rng: () => number;
+  orderVolumeMultiplier?: number;
 };
 
 export type GeneratedPayment = {
@@ -164,12 +166,21 @@ export function sessionsForDay(day: Date) {
   return 1;
 }
 
-export function ordersForDay(day: Date, dayIndex: number, rng: () => number) {
+export function ordersForDay(
+  day: Date,
+  dayIndex: number,
+  rng: () => number,
+  volumeMultiplier = 1,
+) {
   const weekday = day.getDay();
   const weekendBoost = weekday === 5 || weekday === 6 ? 1.25 : 1;
   const trendBoost = 1 + dayIndex * 0.003;
+  const seasonal =
+    1 +
+    Math.sin((dayIndex / 30) * Math.PI * 2) * 0.08 +
+    Math.sin((dayIndex / 90) * Math.PI * 2) * 0.05;
   const base = randomInt(18, 28, rng);
-  return Math.round(base * weekendBoost * trendBoost);
+  return Math.round(base * weekendBoost * trendBoost * seasonal * volumeMultiplier);
 }
 
 function randomOrderTime(day: Date, rng: () => number) {
@@ -180,21 +191,33 @@ function randomOrderTime(day: Date, rng: () => number) {
   return time;
 }
 
-function buildLineItems(products: SeedProduct[], rng: () => number): PricingLineInput[] {
-  const lineCount = randomInt(1, 4, rng);
+function pickWeightedProduct(products: SeedProduct[], ctx: SeedContext): SeedProduct {
+  if (!ctx.productWeights || ctx.productWeights.size === 0) {
+    return pickOne(products, ctx.rng);
+  }
+
+  const weighted = products.map((product) => ({
+    product,
+    weight: ctx.productWeights!.get(product.id) ?? 1,
+  }));
+  return pickWeighted(weighted, ctx.rng).product;
+}
+
+function buildLineItems(products: SeedProduct[], ctx: SeedContext): PricingLineInput[] {
+  const lineCount = randomInt(1, 4, ctx.rng);
   const chosen = new Set<string>();
   const lines: PricingLineInput[] = [];
 
   while (lines.length < lineCount) {
-    const product = pickOne(products, rng);
-    if (chosen.has(product.id) && rng() > 0.35) continue;
+    const product = pickWeightedProduct(products, ctx);
+    if (chosen.has(product.id) && ctx.rng() > 0.35) continue;
     chosen.add(product.id);
     lines.push({
       productId: product.id,
       name: product.name,
       unitPrice: Number(product.price),
       taxRate: Number(product.taxRate),
-      qty: randomInt(1, 2, rng),
+      qty: randomInt(1, 2, ctx.rng),
       isKitchenItem: product.isKitchenItem,
     });
   }
@@ -244,11 +267,13 @@ function buildOrder(
   const sentToKitchenAt = addMinutes(paidAt, -randomInt(5, 15, rng));
   const createdAt = addMinutes(sentToKitchenAt, -randomInt(1, 4, rng));
   const fulfillmentType = rng() < 0.75 ? "dine_in" : "takeaway";
-  const useCoupon = ctx.coupon && rng() < 0.1;
-  const lines = buildLineItems(ctx.products, rng);
+  const useCoupon =
+    ctx.coupons.length > 0 && rng() < (ctx.orderVolumeMultiplier ? 0.14 : 0.1);
+  const coupon = useCoupon ? pickOne(ctx.coupons, rng) : null;
+  const lines = buildLineItems(ctx.products, ctx);
   const computed = computeOrder(lines, {
     promotions: ctx.promotions,
-    coupon: useCoupon ? ctx.coupon : null,
+    coupon,
   });
 
   const items: GeneratedOrderItem[] = computed.lines.map((line) => ({
@@ -366,7 +391,12 @@ export function generateDemoHistory(ctx: SeedContext, days = 90) {
     day.setDate(start.getDate() + dayIndex);
 
     const sessionCount = sessionsForDay(day);
-    const dailyOrders = ordersForDay(day, dayIndex, ctx.rng);
+    const dailyOrders = ordersForDay(
+      day,
+      dayIndex,
+      ctx.rng,
+      ctx.orderVolumeMultiplier ?? 1,
+    );
     const perSession = Math.max(1, Math.floor(dailyOrders / sessionCount));
     const remainder = dailyOrders - perSession * sessionCount;
 

@@ -48,7 +48,7 @@ export function RevenueTrendChart({
       <ResponsiveContainer width="100%" height={260}>
         <ComposedChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
           <YAxis yAxisId="left" tickFormatter={(v) => `₹${v}`} />
           <YAxis yAxisId="right" orientation="right" />
           <Tooltip
@@ -88,7 +88,7 @@ export function OrdersTrendChart({
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
           <YAxis />
           <Tooltip />
           <Area
@@ -161,7 +161,7 @@ export function HourlySalesChart({
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
           <YAxis tickFormatter={(v) => `₹${v}`} />
           <Tooltip formatter={(value) => formatMoney(Number(value))} />
           <Bar dataKey="revenue" fill={colors[4]} radius={[4, 4, 0, 0]} />

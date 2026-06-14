@@ -8,6 +8,7 @@ import {
   type LucideIcon,
   Monitor,
   Package,
+  ScrollText,
   Tags,
   TicketPercent,
   Users,
@@ -58,6 +59,7 @@ export const adminNav: NavItem[] = [
   { label: "Coupon & Promotion", href: "/admin/coupons", icon: TicketPercent },
   { label: "Booking", href: "/admin/booking", icon: CalendarClock },
   { label: "User / Employee", href: "/admin/users", icon: Users },
+  { label: "Audit Log", href: "/admin/audit", icon: ScrollText },
   { label: "KDS", href: "/kds", icon: Monitor },
   { label: "Reports", href: "/admin/reports", icon: BarChart3 },
 ];

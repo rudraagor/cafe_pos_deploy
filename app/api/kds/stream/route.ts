@@ -3,11 +3,24 @@ import {
   realtimeBus,
   type KdsChangedPayload,
 } from "@/lib/realtime/bus";
+import {
+  checkRateLimit,
+  clientIpFromHeaders,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  const limit = checkRateLimit({
+    scope: "api:kds:stream",
+    identifier: clientIpFromHeaders(request.headers),
+    limit: 30,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) return rateLimitResponse(limit);
+
   const encoder = new TextEncoder();
   let keepAlive: ReturnType<typeof setInterval> | null = null;
   let listener: ((payload: KdsChangedPayload) => void) | null = null;

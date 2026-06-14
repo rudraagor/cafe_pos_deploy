@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { BarChart3, LogOut, Menu } from "lucide-react";
+import { BarChart3, Loader2, LogOut, Menu } from "lucide-react";
 import { toast } from "sonner";
 import { logout } from "@/app/(auth)/actions";
 import { closeSession } from "@/app/(dashboard)/pos/actions";
@@ -21,12 +21,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/lib/pos/pricing";
 import { cn } from "@/lib/utils";
 
 type CloseSummary = {
   totalOrders: number;
   closingAmount: number;
+  expectedCash: number;
+  countedCash: number;
+  cashVariance: number;
   openedAt: Date;
   closedAt: Date;
 };
@@ -43,12 +48,18 @@ export function PosHamburgerMenu({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [summary, setSummary] = useState<CloseSummary | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [countedCash, setCountedCash] = useState("");
 
   function handleCloseSession() {
     startTransition(async () => {
-      const result = await closeSession();
+      const result = await closeSession({
+        countedCash: Number(countedCash || 0),
+      });
       if (result.ok) {
         if (result.summary) setSummary(result.summary);
+        setCloseOpen(false);
+        setCountedCash("");
         toast.success(result.message ?? "Session closed.");
         router.refresh();
       } else {
@@ -72,23 +83,61 @@ export function PosHamburgerMenu({
           title="Session menu"
         >
           <Menu className={cn("mx-auto", collapsed ? "size-5" : "size-5")} />
-          {!collapsed ? (
-            <span className="sr-only">Session menu</span>
-          ) : null}
+          {!collapsed ? <span className="sr-only">Session menu</span> : null}
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align={collapsed ? "start" : "end"}
           side={collapsed ? "right" : "top"}
           className="w-56"
         >
-          <DropdownMenuItem onClick={handleCloseSession} disabled={isPending}>
+          <DropdownMenuItem
+            onClick={() => setCloseOpen(true)}
+            disabled={isPending}
+          >
             Close session
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => logout()}>Log out</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={!!summary} onOpenChange={(open) => !open && setSummary(null)}>
+      <Dialog open={closeOpen} onOpenChange={setCloseOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Blind cash count</DialogTitle>
+            <DialogDescription>
+              Enter the physical cash in drawer before closing. Expected cash is
+              revealed after submission.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="counted-cash">Counted cash</Label>
+            <Input
+              id="counted-cash"
+              type="number"
+              min={0}
+              step="0.01"
+              value={countedCash}
+              onChange={(event) => setCountedCash(event.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+          <DialogFooter showCloseButton>
+            <Button
+              type="button"
+              onClick={handleCloseSession}
+              disabled={isPending || Number(countedCash || 0) < 0}
+            >
+              {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Close session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!summary}
+        onOpenChange={(open) => !open && setSummary(null)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Session closed</DialogTitle>
@@ -102,6 +151,18 @@ export function PosHamburgerMenu({
               <SummaryTile
                 label="Closing sales"
                 value={formatMoney(summary.closingAmount)}
+              />
+              <SummaryTile
+                label="Expected cash"
+                value={formatMoney(summary.expectedCash)}
+              />
+              <SummaryTile
+                label="Counted cash"
+                value={formatMoney(summary.countedCash)}
+              />
+              <SummaryTile
+                label="Cash variance"
+                value={formatMoney(summary.cashVariance)}
               />
               <SummaryTile
                 label="Opened"

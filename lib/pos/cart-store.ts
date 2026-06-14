@@ -19,6 +19,15 @@ export type TableCart = {
   customerName?: string;
 };
 
+export type PendingKitchenOrder = {
+  id: string;
+  cartId: string;
+  payload: unknown;
+  createdAt: string;
+  attempts: number;
+  lastError?: string;
+};
+
 export const TAKEAWAY_CART_ID = "takeaway";
 
 /** Stable fallback — must be the same reference for empty carts (Zustand SSR). */
@@ -26,6 +35,7 @@ export const EMPTY_CART: TableCart = { items: [] };
 
 type CartState = {
   carts: Record<string, TableCart>;
+  pendingKitchenOrders: PendingKitchenOrder[];
   addItem: (tableId: string, item: Omit<CartItem, "qty">) => void;
   setQty: (tableId: string, cartLineId: string, qty: number) => void;
   removeItem: (tableId: string, cartLineId: string) => void;
@@ -58,6 +68,11 @@ type CartState = {
     },
   ) => void;
   clearTable: (tableId: string) => void;
+  enqueueKitchenOrder: (
+    order: Omit<PendingKitchenOrder, "id" | "createdAt" | "attempts">,
+  ) => string;
+  markKitchenOrderSynced: (id: string) => void;
+  markKitchenOrderFailed: (id: string, error: string) => void;
 };
 
 function cartOrEmpty(carts: Record<string, TableCart>, tableId: string) {
@@ -83,6 +98,7 @@ export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
       carts: {},
+      pendingKitchenOrders: [],
 
       addItem(tableId, item) {
         set((state) => {
@@ -198,6 +214,40 @@ export const useCartStore = create<CartState>()(
           delete next[tableId];
           return { carts: next };
         });
+      },
+
+      enqueueKitchenOrder(order) {
+        const id = crypto.randomUUID();
+        set((state) => ({
+          pendingKitchenOrders: [
+            ...state.pendingKitchenOrders,
+            {
+              ...order,
+              id,
+              createdAt: new Date().toISOString(),
+              attempts: 0,
+            },
+          ],
+        }));
+        return id;
+      },
+
+      markKitchenOrderSynced(id) {
+        set((state) => ({
+          pendingKitchenOrders: state.pendingKitchenOrders.filter(
+            (order) => order.id !== id,
+          ),
+        }));
+      },
+
+      markKitchenOrderFailed(id, error) {
+        set((state) => ({
+          pendingKitchenOrders: state.pendingKitchenOrders.map((order) =>
+            order.id === id
+              ? { ...order, attempts: order.attempts + 1, lastError: error }
+              : order,
+          ),
+        }));
       },
     }),
     {

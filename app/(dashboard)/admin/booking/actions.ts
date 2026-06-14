@@ -5,7 +5,12 @@ import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { requireRole, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { reservationTables, reservations, floors, tables } from "@/lib/db/schema";
+import {
+  reservationTables,
+  reservations,
+  floors,
+  tables,
+} from "@/lib/db/schema";
 import { sendReservationConfirmation } from "@/lib/email/send-reservation-confirmation";
 import { formatMergedTableLabel } from "@/lib/pos/table-labels";
 import {
@@ -22,6 +27,7 @@ import {
   reservationSchema,
   tableSchema,
 } from "@/lib/validations/booking";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export type FloorActionResult = ActionResult<keyof FloorInput>;
 export type TableActionResult = ActionResult<keyof TableInput>;
@@ -296,6 +302,15 @@ export async function createReservation(
   formData: FormData,
 ): Promise<ReservationActionResult> {
   const user = await requireUser();
+  const limit = checkRateLimit({
+    scope: "booking:create_reservation",
+    identifier: user.id,
+    limit: 20,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.ok)
+    return { ok: false, error: "Reservation creation is rate limited." };
+
   const parsed = parseReservation(formData);
   if ("ok" in parsed) return parsed;
 

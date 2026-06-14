@@ -1,5 +1,7 @@
 import { Download } from "lucide-react";
+import { redirect } from "next/navigation";
 import { DashboardCanvas } from "@/components/reports/dashboard-canvas";
+import { LunchRushButton } from "@/components/reports/lunch-rush-button";
 import { LiveToggle } from "@/components/reports/live-toggle";
 import { RangePicker } from "@/components/reports/range-picker";
 import { Button } from "@/components/ui/button";
@@ -10,6 +12,7 @@ import {
   getReportFilterOptions,
 } from "@/lib/reports/queries";
 import {
+  clampReportFilters,
   formatRangeLabel,
   parseReportFilters,
   rangeToSearchParams,
@@ -23,10 +26,16 @@ type ReportsPageProps = {
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   await requireRole("admin");
   const params = await searchParams;
-  const filters = parseReportFilters(params);
-  const [dashboard, filterOptions, liveFloor] = await Promise.all([
+  const filterOptions = await getReportFilterOptions();
+  const parsed = parseReportFilters(params);
+  const filters = clampReportFilters(parsed, filterOptions.dataBounds);
+
+  if (rangeToSearchParams(parsed) !== rangeToSearchParams(filters)) {
+    redirect(`/admin/reports?${rangeToSearchParams(filters)}`);
+  }
+
+  const [dashboard, liveFloor] = await Promise.all([
     getReportDashboard(filters),
-    getReportFilterOptions(),
     getAdminLiveFloor(),
   ]);
   const exportParams = rangeToSearchParams(filters);
@@ -44,6 +53,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           </p>
         </div>
         <div className="flex gap-2">
+          <LunchRushButton />
           <LiveToggle />
           <Button
             variant="outline"

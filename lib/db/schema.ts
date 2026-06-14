@@ -26,6 +26,7 @@ export const promotionRuleType = pgEnum("promotion_rule_type", [
 ]);
 export const paymentType = pgEnum("payment_type", ["cash", "card", "upi"]);
 export const orderStatus = pgEnum("order_status", [
+  "unapproved",
   "draft",
   "paid",
   "cancelled",
@@ -191,7 +192,22 @@ export const posSessions = pgTable("pos_sessions", {
     .notNull()
     .default("0"),
   closingAmount: numeric("closing_amount", { precision: 10, scale: 2 }),
+  expectedCash: numeric("expected_cash", { precision: 10, scale: 2 }),
+  countedCash: numeric("counted_cash", { precision: 10, scale: 2 }),
+  cashVariance: numeric("cash_variance", { precision: 10, scale: 2 }),
   status: sessionStatus("status").notNull().default("open"),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorId: uuid("actor_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id"),
+  metadata: jsonb("metadata").notNull().default({}),
+  ...timestamps,
 });
 
 // ---------------------------------------------------------------------------
@@ -398,17 +414,20 @@ export const orderTablesRelations = relations(orderTables, ({ one }) => ({
   }),
 }));
 
-export const reservationsRelations = relations(reservations, ({ one, many }) => ({
-  linkedOrder: one(orders, {
-    fields: [reservations.linkedOrderId],
-    references: [orders.id],
+export const reservationsRelations = relations(
+  reservations,
+  ({ one, many }) => ({
+    linkedOrder: one(orders, {
+      fields: [reservations.linkedOrderId],
+      references: [orders.id],
+    }),
+    createdByUser: one(users, {
+      fields: [reservations.createdBy],
+      references: [users.id],
+    }),
+    reservationTables: many(reservationTables),
   }),
-  createdByUser: one(users, {
-    fields: [reservations.createdBy],
-    references: [users.id],
-  }),
-  reservationTables: many(reservationTables),
-}));
+);
 
 export const reservationTablesRelations = relations(
   reservationTables,
@@ -448,4 +467,11 @@ export const posSessionsRelations = relations(posSessions, ({ one, many }) => ({
     references: [users.id],
   }),
   orders: many(orders),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  actor: one(users, {
+    fields: [auditLogs.actorId],
+    references: [users.id],
+  }),
 }));

@@ -8,6 +8,10 @@ import { db } from "@/lib/db";
 import { orderItems, orders } from "@/lib/db/schema";
 import { KDS_UNLOCK_COOKIE } from "@/lib/kds/access";
 import { publishKdsChanged } from "@/lib/realtime/publish";
+import {
+  checkRateLimit,
+  clientIpFromServerAction,
+} from "@/lib/security/rate-limit";
 
 function configuredPin() {
   return process.env.KDS_PIN?.trim() || "2468";
@@ -19,10 +23,39 @@ function revalidateKds(orderId?: string) {
   if (orderId) revalidatePath(`/pos/orders/${orderId}`);
 }
 
+async function requireKdsUnlock() {
+  const cookieStore = await cookies();
+  if (cookieStore.get(KDS_UNLOCK_COOKIE)?.value !== "true") {
+    return { ok: false as const, error: "Unlock the kitchen display first." };
+  }
+
+  const ip = await clientIpFromServerAction();
+  const limit = checkRateLimit({
+    scope: "kds:mutation",
+    identifier: ip,
+    limit: 120,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) {
+    return { ok: false as const, error: "Kitchen actions are rate limited." };
+  }
+
+  return { ok: true as const };
+}
+
 export async function unlockKds(
   _previousState: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const ip = await clientIpFromServerAction();
+  const limit = checkRateLimit({
+    scope: "kds:unlock",
+    identifier: ip,
+    limit: 5,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.ok) return { ok: false, error: "Too many PIN attempts." };
+
   const pin = String(formData.get("pin") ?? "").trim();
   if (pin !== configuredPin()) {
     return { ok: false, error: "Incorrect kitchen PIN." };
@@ -41,6 +74,9 @@ export async function unlockKds(
 }
 
 export async function advanceTicket(orderId: string): Promise<ActionResult> {
+  const access = await requireKdsUnlock();
+  if (!access.ok) return access;
+
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, orderId), ne(orders.status, "cancelled")),
   });
@@ -78,6 +114,9 @@ export async function advanceTicket(orderId: string): Promise<ActionResult> {
 }
 
 export async function recallTicket(orderId: string): Promise<ActionResult> {
+  const access = await requireKdsUnlock();
+  if (!access.ok) return access;
+
   const [updated] = await db
     .update(orders)
     .set({ kdsStage: "preparing", updatedAt: new Date() })
@@ -94,6 +133,9 @@ export async function recallTicket(orderId: string): Promise<ActionResult> {
 export async function toggleItemCompleted(
   orderItemId: string,
 ): Promise<ActionResult> {
+  const access = await requireKdsUnlock();
+  if (!access.ok) return access;
+
   const item = await db.query.orderItems.findFirst({
     where: eq(orderItems.id, orderItemId),
     with: { order: true },

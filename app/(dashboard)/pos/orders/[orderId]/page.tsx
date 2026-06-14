@@ -124,6 +124,9 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
         <div>
           <dt className="text-muted-foreground">Customer</dt>
           <dd className="font-medium">{order.customer?.name ?? "—"}</dd>
+          {order.customer?.email ? (
+            <dd className="text-muted-foreground text-xs">{order.customer.email}</dd>
+          ) : null}
         </div>
         <div>
           <dt className="text-muted-foreground">Table</dt>

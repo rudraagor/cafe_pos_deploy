@@ -58,7 +58,6 @@ export function Receipt({
   digitalReceiptUrl,
   digitalReceiptQrDataUrl,
 }: ReceiptProps) {
-  const payment = order.payments[0];
   return (
     <article className="mx-auto w-full max-w-sm bg-white p-6 text-sm text-neutral-950 shadow-sm print:shadow-none">
       <header className="border-b border-dashed pb-4 text-center">
@@ -112,9 +111,9 @@ export function Receipt({
                 </p>
                 {Array.isArray(item.modifiers) && item.modifiers.length > 0 ? (
                   <p className="text-xs font-medium text-neutral-700">
-                    {item.modifiers.map((modifier) =>
-                      modifierLabel(String(modifier)),
-                    ).join(", ")}
+                    {item.modifiers
+                      .map((modifier) => modifierLabel(String(modifier)))
+                      .join(", ")}
                   </p>
                 ) : null}
                 {item.note ? (
@@ -135,7 +134,9 @@ export function Receipt({
         <ReceiptTotal label="Subtotal" value={Number(order.subtotal)} />
         {Number(order.discountTotal) > 0 ? (
           <ReceiptTotal
-            label={order.coupon ? `Discount (${order.coupon.code})` : "Discount"}
+            label={
+              order.coupon ? `Discount (${order.coupon.code})` : "Discount"
+            }
             value={-Number(order.discountTotal)}
           />
         ) : null}
@@ -146,20 +147,27 @@ export function Receipt({
         </div>
       </section>
 
-      {payment ? (
+      {order.payments.length > 0 ? (
         <section className="space-y-2 border-b border-dashed py-4">
-          <ReceiptTotal
-            label={`Paid (${payment.method.toUpperCase()})`}
-            value={Number(payment.amount)}
-          />
-          {payment.changeDue ? (
-            <ReceiptTotal label="Change" value={Number(payment.changeDue)} />
-          ) : null}
-          {payment.reference ? (
-            <p className="break-all text-xs text-neutral-500">
-              Ref: {payment.reference}
-            </p>
-          ) : null}
+          {order.payments.map((payment, index) => (
+            <div key={`${payment.method}-${index}`} className="space-y-1">
+              <ReceiptTotal
+                label={`Paid (${payment.method.toUpperCase()})`}
+                value={Number(payment.amount)}
+              />
+              {payment.changeDue ? (
+                <ReceiptTotal
+                  label="Change"
+                  value={Number(payment.changeDue)}
+                />
+              ) : null}
+              {payment.reference ? (
+                <p className="text-xs break-all text-neutral-500">
+                  Ref: {payment.reference}
+                </p>
+              ) : null}
+            </div>
+          ))}
         </section>
       ) : null}
 
@@ -168,7 +176,7 @@ export function Receipt({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={digitalReceiptQrDataUrl} alt="Digital receipt QR" />
         </div>
-        <p className="break-all text-[11px] text-neutral-500">
+        <p className="text-[11px] break-all text-neutral-500">
           {digitalReceiptUrl}
         </p>
         <p className="text-xs font-medium">{brand.footer}</p>

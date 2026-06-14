@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Check,
   CreditCard,
   Loader2,
   Mail,
@@ -8,12 +9,17 @@ import {
   Printer,
   ReceiptText,
   Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { deleteDraftOrder, resendReceipt } from "@/app/(dashboard)/pos/actions";
+import {
+  approveQrOrder,
+  rejectQrOrder,
+} from "@/app/(dashboard)/pos/qr-orders/actions";
 import {
   PaymentDialog,
   type EnabledPaymentMethod,
@@ -63,7 +69,7 @@ type OrderDetailActionsProps = {
   orderNumber: string;
   total: number;
   tableId: string | null;
-  status: "draft" | "paid" | "cancelled";
+  status: "unapproved" | "draft" | "paid" | "cancelled";
   editPayload?: EditDraftPayload;
   paymentMethods: EnabledPaymentMethod[];
   upiQrDataUrl?: string | null;
@@ -139,6 +145,59 @@ export function OrderDetailActions({
         toast.error(result.error);
       }
     });
+  }
+
+  function handleApproveQr() {
+    startTransition(async () => {
+      const result = await approveQrOrder(orderId);
+      if (result.ok) {
+        toast.success(result.message ?? "Order approved.");
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
+  function handleRejectQr() {
+    startTransition(async () => {
+      const result = await rejectQrOrder(orderId);
+      if (result.ok) {
+        toast.success(result.message ?? "Order rejected.");
+        router.push("/pos/orders?filter=unapproved");
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
+  if (status === "unapproved") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" disabled={isPending} onClick={handleApproveQr}>
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Check className="size-4" />
+          )}
+          Approve & send to kitchen
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isPending}
+          onClick={handleRejectQr}
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <X className="size-4" />
+          )}
+          Reject
+        </Button>
+      </div>
+    );
   }
 
   if (status === "paid") {
@@ -268,13 +327,19 @@ export function OrderItemsList({ items }: { items: OrderItemRow[] }) {
 export function OrderStatusBadge({
   status,
 }: {
-  status: "draft" | "paid" | "cancelled";
+  status: "unapproved" | "draft" | "paid" | "cancelled";
 }) {
+  const labels: Record<typeof status, string> = {
+    unapproved: "Needs approval",
+    draft: "Unpaid",
+    paid: "Paid",
+    cancelled: "Cancelled",
+  };
   const variant =
     status === "paid"
       ? "default"
       : status === "cancelled"
         ? "destructive"
         : "secondary";
-  return <Badge variant={variant}>{status}</Badge>;
+  return <Badge variant={variant}>{labels[status]}</Badge>;
 }

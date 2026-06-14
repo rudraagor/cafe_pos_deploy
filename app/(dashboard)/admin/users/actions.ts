@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { and, count, eq, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
+import { writeAuditLog } from "@/lib/audit";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -118,7 +119,7 @@ async function assertCanRemoveAdminPower(targetId: string) {
 export async function createUserAccount(
   formData: FormData,
 ): Promise<UserCreateActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parseCreateUser(formData);
   if ("ok" in parsed) return parsed;
@@ -133,11 +134,21 @@ export async function createUserAccount(
   }
 
   const passwordHash = await bcrypt.hash(parsed.password, 10);
-  await db.insert(users).values({
-    name: parsed.name,
-    email: parsed.email,
-    role: parsed.role,
-    passwordHash,
+  const [created] = await db
+    .insert(users)
+    .values({
+      name: parsed.name,
+      email: parsed.email,
+      role: parsed.role,
+      passwordHash,
+    })
+    .returning({ id: users.id });
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "user.created",
+    entityType: "user",
+    entityId: created.id,
+    metadata: { role: parsed.role },
   });
 
   revalidatePath("/admin/users");
@@ -149,7 +160,7 @@ export async function updateUserAccount(
   id: string,
   formData: FormData,
 ): Promise<UserUpdateActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parseUpdateUser(formData);
   if ("ok" in parsed) return parsed;
@@ -181,6 +192,13 @@ export async function updateUserAccount(
     .update(users)
     .set({ name: parsed.name, email: parsed.email, role: parsed.role })
     .where(eq(users.id, id));
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "user.updated",
+    entityType: "user",
+    entityId: id,
+    metadata: { role: parsed.role },
+  });
 
   revalidatePath("/admin/users");
 
@@ -191,7 +209,7 @@ export async function changeUserPassword(
   id: string,
   formData: FormData,
 ): Promise<PasswordActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const parsed = parsePassword(formData);
   if ("ok" in parsed) return parsed;
@@ -204,6 +222,12 @@ export async function changeUserPassword(
     .returning({ id: users.id });
 
   if (!updated) return { ok: false, error: "User not found." };
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "user.password_changed",
+    entityType: "user",
+    entityId: id,
+  });
 
   revalidatePath("/admin/users");
 
@@ -224,6 +248,12 @@ export async function archiveUser(id: string): Promise<ActionResult> {
     .update(users)
     .set({ archivedAt: new Date() })
     .where(eq(users.id, id));
+  await writeAuditLog({
+    actorId: currentUser.id,
+    action: "user.archived",
+    entityType: "user",
+    entityId: id,
+  });
 
   revalidatePath("/admin/users");
 
@@ -231,7 +261,7 @@ export async function archiveUser(id: string): Promise<ActionResult> {
 }
 
 export async function restoreUser(id: string): Promise<ActionResult> {
-  await requireRole("admin");
+  const actor = await requireRole("admin");
 
   const [updated] = await db
     .update(users)
@@ -240,6 +270,12 @@ export async function restoreUser(id: string): Promise<ActionResult> {
     .returning({ id: users.id });
 
   if (!updated) return { ok: false, error: "User not found." };
+  await writeAuditLog({
+    actorId: actor.id,
+    action: "user.restored",
+    entityType: "user",
+    entityId: id,
+  });
 
   revalidatePath("/admin/users");
 
@@ -263,6 +299,12 @@ export async function deleteUser(id: string): Promise<ActionResult> {
       .returning({ id: users.id });
 
     if (!deleted) return { ok: false, error: "User not found." };
+    await writeAuditLog({
+      actorId: currentUser.id,
+      action: "user.deleted",
+      entityType: "user",
+      entityId: id,
+    });
   } catch {
     return {
       ok: false,

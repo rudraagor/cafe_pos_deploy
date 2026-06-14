@@ -13,7 +13,10 @@ import {
 import type { FloorWithTables } from "@/components/pos/table-grid";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { TAKEAWAY_CART_ID } from "@/lib/pos/cart-store";
-import type { TableOccupancy } from "@/lib/pos/queries";
+import type {
+  TableOccupancy,
+  UpcomingTableReservation,
+} from "@/lib/pos/queries";
 import type { PromotionInput } from "@/lib/pos/pricing";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +34,7 @@ type OrderViewProps = {
   floors: FloorWithTables[];
   occupiedTableIds: string[];
   occupiedOrdersByTable?: Record<string, TableOccupancy>;
+  upcomingReservationsByTable?: Record<string, UpcomingTableReservation>;
   fulfillmentType?: "dine_in" | "takeaway";
 };
 
@@ -46,6 +50,7 @@ export function OrderView({
   floors,
   occupiedTableIds,
   occupiedOrdersByTable,
+  upcomingReservationsByTable,
   fulfillmentType = "dine_in",
 }: OrderViewProps) {
   const [floorOpen, setFloorOpen] = useState(false);
@@ -122,6 +127,7 @@ export function OrderView({
           floors={floors}
           occupiedTableIds={occupiedTableIds}
           occupiedOrdersByTable={occupiedOrdersByTable}
+          upcomingReservationsByTable={upcomingReservationsByTable}
         />
       </>
     );
@@ -156,6 +162,7 @@ export function OrderView({
         floors={floors}
         occupiedTableIds={occupiedTableIds}
         occupiedOrdersByTable={occupiedOrdersByTable}
+        upcomingReservationsByTable={upcomingReservationsByTable}
       />
     </>
   );

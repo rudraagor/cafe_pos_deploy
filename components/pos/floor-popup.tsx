@@ -10,7 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { TableOccupancy } from "@/lib/pos/queries";
+import type {
+  TableOccupancy,
+  UpcomingTableReservation,
+} from "@/lib/pos/queries";
 import { TableGrid, type FloorWithTables } from "./table-grid";
 
 type FloorPopupProps = {
@@ -19,6 +22,7 @@ type FloorPopupProps = {
   floors: FloorWithTables[];
   occupiedTableIds: string[];
   occupiedOrdersByTable?: Record<string, TableOccupancy>;
+  upcomingReservationsByTable?: Record<string, UpcomingTableReservation>;
 };
 
 export function FloorPopup({
@@ -27,6 +31,7 @@ export function FloorPopup({
   floors,
   occupiedTableIds,
   occupiedOrdersByTable,
+  upcomingReservationsByTable,
 }: FloorPopupProps) {
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
 
@@ -59,6 +64,7 @@ export function FloorPopup({
           floors={floors}
           occupiedTableIds={occupiedTableIds}
           occupiedOrdersByTable={occupiedOrdersByTable}
+          upcomingReservationsByTable={upcomingReservationsByTable}
           selectedTableIds={selectedTableIds}
           onToggleTable={toggleTable}
         />

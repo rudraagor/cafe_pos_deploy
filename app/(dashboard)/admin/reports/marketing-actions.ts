@@ -15,6 +15,7 @@ import {
   parseReportFilters,
   type ReportSearchParams,
 } from "@/lib/reports/range";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export async function fetchCustomerProfile(
   customerId: string,
@@ -74,7 +75,22 @@ export async function sendCouponOffer(input: {
   couponId: string;
   message?: string;
 }): Promise<ActionResult> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
+  const userLimit = checkRateLimit({
+    scope: "marketing:send_coupon:user",
+    identifier: user.id,
+    limit: 10,
+    windowMs: 10 * 60 * 1000,
+  });
+  const customerLimit = checkRateLimit({
+    scope: "marketing:send_coupon:customer",
+    identifier: input.customerId,
+    limit: 3,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!userLimit.ok || !customerLimit.ok) {
+    return { ok: false, error: "Coupon emails are rate limited." };
+  }
 
   const [customer, coupon] = await Promise.all([
     db.query.customers.findFirst({ where: eq(customers.id, input.customerId) }),

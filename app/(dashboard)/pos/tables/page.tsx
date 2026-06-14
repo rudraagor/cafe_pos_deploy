@@ -5,6 +5,7 @@ import { ReservationFormDialog } from "@/app/(dashboard)/admin/booking/reservati
 import {
   getActiveTableOccupancies,
   getFloorsWithTables,
+  getUpcomingTableReservations,
 } from "@/lib/pos/queries";
 import { getOpenSessionForUser } from "@/lib/pos/session";
 import { redirect } from "next/navigation";
@@ -14,16 +15,23 @@ export default async function PosTablesPage() {
   const session = await getOpenSessionForUser(user.id);
   if (!session) redirect("/pos");
 
-  const [floors, activeTableOrders] = await Promise.all([
+  const [floors, activeTableOrders, upcomingReservations] = await Promise.all([
     getFloorsWithTables(),
     getActiveTableOccupancies(session.id),
+    getUpcomingTableReservations(),
   ]);
   const occupiedOrdersByTable = Object.fromEntries(activeTableOrders);
+  const upcomingReservationsByTable = Object.fromEntries(upcomingReservations);
 
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Table View</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Table View</h1>
+          <p className="text-muted-foreground text-sm">
+            Tap a table to open its order. Use the QR icon to print or share guest ordering.
+          </p>
+        </div>
         <ReservationFormDialog
           mode="create"
           floors={floors.map((f) => ({
@@ -42,6 +50,7 @@ export default async function PosTablesPage() {
         }))}
         occupiedTableIds={Object.keys(occupiedOrdersByTable)}
         occupiedOrdersByTable={occupiedOrdersByTable}
+        upcomingReservationsByTable={upcomingReservationsByTable}
       />
     </div>
   );

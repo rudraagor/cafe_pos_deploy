@@ -1,12 +1,25 @@
 "use client";
 
-import { Loader2, Minus, Plus, Send, Tag, Trash2, User } from "lucide-react";
+import {
+  Loader2,
+  Minus,
+  Plus,
+  Send,
+  Sparkles,
+  Tag,
+  Trash2,
+  User,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { sendToKitchen } from "@/app/(dashboard)/pos/actions";
+import {
+  fetchCustomerUsual,
+  sendToKitchen,
+} from "@/app/(dashboard)/pos/actions";
 import { CustomerAssignPopup } from "@/components/pos/customer-assign-popup";
 import { DiscountPopup } from "@/components/pos/discount-popup";
+import { DirectGrabBadge } from "@/components/pos/direct-grab-badge";
 import { Button } from "@/components/ui/button";
 import { useTableCart, useCartStore } from "@/lib/pos/cart-store";
 import { modifierLabel } from "@/lib/pos/modifiers";
@@ -41,13 +54,16 @@ export function PosCartColumn({
 }: PosCartColumnProps) {
   const router = useRouter();
   const cart = useTableCart(tableId);
+  const addItem = useCartStore((s) => s.addItem);
   const setQty = useCartStore((s) => s.setQty);
   const removeItem = useCartStore((s) => s.removeItem);
   const setCoupon = useCartStore((s) => s.setCoupon);
   const clearTable = useCartStore((s) => s.clearTable);
+  const enqueueKitchenOrder = useCartStore((s) => s.enqueueKitchenOrder);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isUsualPending, startUsualTransition] = useTransition();
 
   const coupon = useMemo(() => {
     if (!cart.couponCode || !cart.couponId || cart.couponValue == null) {
@@ -79,26 +95,73 @@ export function PosCartColumn({
       return;
     }
 
-    startTransition(async () => {
-      const result = await sendToKitchen({
-        tableId: orderTableId,
-        tableIds: orderTableIds,
-        reservationId: reservationId ?? undefined,
-        fulfillmentType,
-        orderId: cart.orderId,
-        items: cart.items,
-        couponCode: cart.couponCode,
-        customerId: cart.customerId,
-      });
+    const payload = {
+      tableId: orderTableId,
+      tableIds: orderTableIds,
+      reservationId: reservationId ?? undefined,
+      fulfillmentType,
+      orderId: cart.orderId,
+      items: cart.items,
+      couponCode: cart.couponCode,
+      customerId: cart.customerId,
+    };
 
-      if (result.ok) {
-        toast.success(result.message ?? "Sent to kitchen.");
+    if (!navigator.onLine) {
+      enqueueKitchenOrder({ cartId: tableId, payload });
+      clearTable(tableId);
+      toast.info("You are offline. Order queued and will sync automatically.");
+      router.push("/pos/orders");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await sendToKitchen(payload);
+
+        if (result.ok) {
+          toast.success(result.message ?? "Sent to kitchen.");
+          clearTable(tableId);
+          router.push("/pos/orders");
+          router.refresh();
+        } else {
+          toast.error(result.error);
+        }
+      } catch {
+        enqueueKitchenOrder({ cartId: tableId, payload });
         clearTable(tableId);
+        toast.info("Network failed. Order queued and will sync automatically.");
         router.push("/pos/orders");
-        router.refresh();
-      } else {
-        toast.error(result.error);
       }
+    });
+  }
+
+  function handleTheUsual() {
+    if (!cart.customerId) {
+      toast.error("Select a customer first.");
+      setCustomerOpen(true);
+      return;
+    }
+
+    startUsualTransition(async () => {
+      const result = await fetchCustomerUsual(cart.customerId!);
+      if (!result.ok || !result.usual) {
+        toast.error(result.error ?? "Could not load the usual order.");
+        return;
+      }
+
+      const usual = result.usual;
+      addItem(tableId, {
+        productId: usual.productId,
+        name: usual.name,
+        unitPrice: Number(usual.price),
+        taxRate: Number(usual.taxRate),
+        isKitchenItem: usual.isKitchenItem,
+        categoryId: usual.categoryId,
+        categoryColor: usual.categoryColor ?? "#64748b",
+      });
+      toast.success(
+        `Added ${usual.name}${cart.customerName ? ` — ${cart.customerName}'s usual` : "."}`,
+      );
     });
   }
 
@@ -117,7 +180,12 @@ export function PosCartColumn({
                 className="flex items-start gap-2 rounded-lg border p-3"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{line.name}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-sm font-medium">{line.name}</p>
+                    {line.isKitchenItem === false ? (
+                      <DirectGrabBadge compact />
+                    ) : null}
+                  </div>
                   <p className="text-muted-foreground text-xs">
                     {formatMoney(line.unitPrice)} each
                   </p>
@@ -202,7 +270,9 @@ export function PosCartColumn({
         <div className="space-y-1 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="tabular-nums">{formatMoney(computed.subtotal)}</span>
+            <span className="tabular-nums">
+              {formatMoney(computed.subtotal)}
+            </span>
           </div>
           {computed.orderDiscounts.map((d) => (
             <div key={d.id} className="flex justify-between text-green-600">
@@ -221,10 +291,22 @@ export function PosCartColumn({
         </div>
 
         {cart.customerName ? (
-          <p className="text-muted-foreground mt-2 text-xs">
-            Customer:{" "}
-            <span className="text-foreground">{cart.customerName}</span>
-          </p>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-muted-foreground min-w-0 text-xs">
+              Customer:{" "}
+              <span className="text-foreground font-medium">
+                {cart.customerName}
+              </span>
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => setCustomerOpen(true)}
+            >
+              Change
+            </Button>
+          </div>
         ) : reservationCustomerName ? (
           <p className="text-muted-foreground mt-2 text-xs">
             Reservation:{" "}
@@ -252,12 +334,12 @@ export function PosCartColumn({
       </div>
 
       <div className="bg-card shrink-0 space-y-2 border-t p-3">
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="flex-1"
+            className="h-9"
             onClick={() => setCustomerOpen(true)}
           >
             <User className="size-4" />
@@ -267,13 +349,33 @@ export function PosCartColumn({
             type="button"
             variant="outline"
             size="sm"
-            className="flex-1"
+            className="h-9"
             onClick={() => setDiscountOpen(true)}
           >
             <Tag className="size-4" />
             Discount
           </Button>
         </div>
+        <Button
+          type="button"
+          variant={cart.customerId ? "secondary" : "outline"}
+          size="sm"
+          className="h-9 w-full"
+          disabled={!cart.customerId || isUsualPending}
+          onClick={handleTheUsual}
+        >
+          {isUsualPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          The usual
+        </Button>
+        {!cart.customerId ? (
+          <p className="text-muted-foreground px-1 text-center text-[11px]">
+            Assign a customer to add their most-ordered item.
+          </p>
+        ) : null}
         <Button
           type="button"
           className="h-11 w-full"

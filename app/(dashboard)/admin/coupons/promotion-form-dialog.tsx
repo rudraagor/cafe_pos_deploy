@@ -237,63 +237,63 @@ export function PromotionFormDialog({
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {values.ruleType === "product_quantity" ? (
-              <>
-                <ProductChecklist
-                  label="Product"
-                  products={products}
-                  values={values.productId ? [values.productId] : []}
-                  onChange={(next) => updateValue("productId", next[0] ?? "")}
-                  searchPlaceholder="Search products..."
-                  multiple={false}
-                  emptyHint="Select one product for this promotion."
-                />
-                {fieldErrors?.productId?.[0] ? (
-                  <p className="text-destructive text-sm sm:col-span-2">
-                    {fieldErrors.productId[0]}
-                  </p>
-                ) : null}
-                <div className="space-y-2">
-                  <Label htmlFor={`${mode}-promotion-qty`}>
-                    Minimum quantity
-                  </Label>
-                  <Input
-                    id={`${mode}-promotion-qty`}
-                    value={values.minQuantity}
-                    inputMode="numeric"
-                    onChange={(event) =>
-                      updateValue("minQuantity", event.target.value)
-                    }
-                    aria-invalid={!!fieldErrors?.minQuantity?.[0]}
+                <>
+                  <ProductChecklist
+                    label="Product"
+                    products={products}
+                    values={values.productId ? [values.productId] : []}
+                    onChange={(next) => updateValue("productId", next[0] ?? "")}
+                    searchPlaceholder="Search products..."
+                    multiple={false}
+                    emptyHint="Select one product for this promotion."
                   />
-                  {fieldErrors?.minQuantity?.[0] ? (
-                    <p className="text-destructive text-sm">
-                      {fieldErrors.minQuantity[0]}
+                  {fieldErrors?.productId?.[0] ? (
+                    <p className="text-destructive text-sm sm:col-span-2">
+                      {fieldErrors.productId[0]}
                     </p>
                   ) : null}
-                </div>
-              </>
+                  <div className="space-y-2">
+                    <Label htmlFor={`${mode}-promotion-qty`}>
+                      Minimum quantity
+                    </Label>
+                    <Input
+                      id={`${mode}-promotion-qty`}
+                      value={values.minQuantity}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        updateValue("minQuantity", event.target.value)
+                      }
+                      aria-invalid={!!fieldErrors?.minQuantity?.[0]}
+                    />
+                    {fieldErrors?.minQuantity?.[0] ? (
+                      <p className="text-destructive text-sm">
+                        {fieldErrors.minQuantity[0]}
+                      </p>
+                    ) : null}
+                  </div>
+                </>
               ) : null}
 
               {values.ruleType === "order_threshold" ? (
                 <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor={`${mode}-promotion-amount`}>
-                  Minimum order amount
-                </Label>
-                <Input
-                  id={`${mode}-promotion-amount`}
-                  value={values.minOrderAmount}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateValue("minOrderAmount", event.target.value)
-                  }
-                  aria-invalid={!!fieldErrors?.minOrderAmount?.[0]}
-                />
-                {fieldErrors?.minOrderAmount?.[0] ? (
-                  <p className="text-destructive text-sm">
-                    {fieldErrors.minOrderAmount[0]}
-                  </p>
-                ) : null}
-              </div>
+                  <Label htmlFor={`${mode}-promotion-amount`}>
+                    Minimum order amount
+                  </Label>
+                  <Input
+                    id={`${mode}-promotion-amount`}
+                    value={values.minOrderAmount}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateValue("minOrderAmount", event.target.value)
+                    }
+                    aria-invalid={!!fieldErrors?.minOrderAmount?.[0]}
+                  />
+                  {fieldErrors?.minOrderAmount?.[0] ? (
+                    <p className="text-destructive text-sm">
+                      {fieldErrors.minOrderAmount[0]}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
 
               {values.ruleType === "combo" ? (
@@ -370,38 +370,38 @@ export function PromotionFormDialog({
               buy-X-get-Y-free, or leave empty to discount the matching combo.
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-promotion-type`}>Discount type</Label>
-              <select
-                id={`${mode}-promotion-type`}
-                value={values.discountType}
-                onChange={(event) =>
-                  updateValue(
-                    "discountType",
-                    event.target.value as PromotionFormValue["discountType"],
-                  )
-                }
-                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border bg-transparent px-2.5 text-sm outline-none focus-visible:ring-3"
-              >
-                <option value="percent">Percent</option>
-                <option value="fixed">Fixed</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-promotion-value`}>Value</Label>
-              <Input
-                id={`${mode}-promotion-value`}
-                value={values.value}
-                inputMode="decimal"
-                onChange={(event) => updateValue("value", event.target.value)}
-                aria-invalid={!!fieldErrors?.value?.[0]}
-              />
-              {fieldErrors?.value?.[0] ? (
-                <p className="text-destructive text-sm">
-                  {fieldErrors.value[0]}
-                </p>
-              ) : null}
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${mode}-promotion-type`}>Discount type</Label>
+                <select
+                  id={`${mode}-promotion-type`}
+                  value={values.discountType}
+                  onChange={(event) =>
+                    updateValue(
+                      "discountType",
+                      event.target.value as PromotionFormValue["discountType"],
+                    )
+                  }
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border bg-transparent px-2.5 text-sm outline-none focus-visible:ring-3"
+                >
+                  <option value="percent">Percent</option>
+                  <option value="fixed">Fixed</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${mode}-promotion-value`}>Value</Label>
+                <Input
+                  id={`${mode}-promotion-value`}
+                  value={values.value}
+                  inputMode="decimal"
+                  onChange={(event) => updateValue("value", event.target.value)}
+                  aria-invalid={!!fieldErrors?.value?.[0]}
+                />
+                {fieldErrors?.value?.[0] ? (
+                  <p className="text-destructive text-sm">
+                    {fieldErrors.value[0]}
+                  </p>
+                ) : null}
+              </div>
               {values.ruleType === "combo" ? (
                 <>
                   <div className="space-y-2 sm:col-span-2">
@@ -483,7 +483,9 @@ export function PromotionFormDialog({
               <span className="text-sm font-medium">Active</span>
               <Switch
                 checked={values.active}
-                onChange={(event) => updateValue("active", event.target.checked)}
+                onChange={(event) =>
+                  updateValue("active", event.target.checked)
+                }
               />
             </label>
             <label className="flex items-center justify-between gap-3 rounded-lg border p-3">
@@ -546,7 +548,7 @@ function ProductChecklist({
   emptyHint?: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const selected = new Set(values);
+  const selected = useMemo(() => new Set(values), [values]);
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -562,7 +564,7 @@ function ProductChecklist({
     );
 
     return [...selectedNotShown, ...matching];
-  }, [products, searchQuery, values]);
+  }, [products, searchQuery, selected]);
 
   function toggle(id: string) {
     if (multiple) {
@@ -598,14 +600,14 @@ function ProductChecklist({
           filteredProducts.map((product) => (
             <label
               key={product.id}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              className="hover:bg-muted flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
             >
               <input
                 type={multiple ? "checkbox" : "radio"}
                 name={multiple ? undefined : label}
                 checked={selected.has(product.id)}
                 onChange={() => toggle(product.id)}
-                className="size-4 rounded border-input"
+                className="border-input size-4 rounded"
               />
               <span className="min-w-0 truncate">{product.name}</span>
             </label>
@@ -614,9 +616,7 @@ function ProductChecklist({
       </div>
       {values.length > 0 ? (
         <p className="text-muted-foreground text-xs">
-          {multiple
-            ? `${values.length} selected`
-            : "1 selected"}
+          {multiple ? `${values.length} selected` : "1 selected"}
         </p>
       ) : emptyHint ? (
         <p className="text-muted-foreground text-xs">{emptyHint}</p>

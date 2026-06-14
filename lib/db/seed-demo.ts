@@ -8,6 +8,22 @@ import { and, count, eq, like, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 import {
+  BULK_DEFAULTS,
+  generateBulkCategories,
+  generateBulkCoupons,
+  generateBulkCustomers,
+  generateBulkEmployees,
+  generateBulkProducts,
+  productPopularityWeights,
+} from "./seed-demo/bulk-fixtures";
+import {
+  createRng,
+  generateDemoHistory,
+  type GeneratedOrder,
+  type GeneratedSession,
+  type SeedContext,
+} from "./seed-demo/generators";
+import {
   DEMO_CUSTOMER_EMAIL_DOMAIN,
   DEMO_CUSTOMERS,
   DEMO_EMPLOYEE_PASSWORD,
@@ -17,16 +33,32 @@ import {
   EXTRA_PRODUCTS,
   EXTRA_TABLES,
 } from "./seed-demo/fixtures";
-import {
-  createRng,
-  generateDemoHistory,
-  type GeneratedOrder,
-  type GeneratedSession,
-  type SeedContext,
-} from "./seed-demo/generators";
 
 const BATCH_SIZE = 100;
 const force = process.argv.includes("--force");
+const bulk = process.argv.includes("--bulk");
+
+function readArg(name: string, fallback: string) {
+  const prefix = `--${name}=`;
+  const match = process.argv.find((arg) => arg.startsWith(prefix));
+  return match ? match.slice(prefix.length) : fallback;
+}
+
+const historyDays = Number(
+  readArg("days", bulk ? String(BULK_DEFAULTS.historyDays) : "90"),
+);
+const orderVolumeMultiplier = bulk
+  ? Number(readArg("volume", String(BULK_DEFAULTS.orderVolumeMultiplier)))
+  : 1;
+const productTarget = bulk
+  ? Number(readArg("products", String(BULK_DEFAULTS.productTarget)))
+  : BULK_DEFAULTS.productTarget;
+const employeeTarget = bulk
+  ? Number(readArg("employees", String(BULK_DEFAULTS.employeeTarget)))
+  : BULK_DEFAULTS.employeeTarget;
+const customerTarget = bulk
+  ? Number(readArg("customers", String(BULK_DEFAULTS.customerTarget)))
+  : BULK_DEFAULTS.customerTarget;
 
 function startOfToday() {
   const now = new Date();
@@ -78,10 +110,14 @@ async function ensureBaseSeed(db: ReturnType<typeof drizzle>) {
 
 async function seedFixtures(db: ReturnType<typeof drizzle>) {
   const passwordHash = await bcrypt.hash(DEMO_EMPLOYEE_PASSWORD, 10);
+  const employees = bulk
+    ? [...DEMO_EMPLOYEES, ...generateBulkEmployees(employeeTarget)]
+    : DEMO_EMPLOYEES;
+
   await db
     .insert(schema.users)
     .values(
-      DEMO_EMPLOYEES.map((employee) => ({
+      employees.map((employee) => ({
         name: employee.name,
         email: employee.email,
         passwordHash,
@@ -90,6 +126,16 @@ async function seedFixtures(db: ReturnType<typeof drizzle>) {
     )
     .onConflictDoNothing({ target: schema.users.email });
 
+  const customers = bulk
+    ? [
+        ...DEMO_CUSTOMERS,
+        ...generateBulkCustomers(
+          DEMO_CUSTOMER_EMAIL_DOMAIN,
+          customerTarget,
+        ),
+      ]
+    : DEMO_CUSTOMERS;
+
   const [existingDemoCustomer] = await db
     .select({ id: schema.customers.id })
     .from(schema.customers)
@@ -97,13 +143,15 @@ async function seedFixtures(db: ReturnType<typeof drizzle>) {
     .limit(1);
 
   if (!existingDemoCustomer) {
-    await db.insert(schema.customers).values(
-      DEMO_CUSTOMERS.map((customer) => ({
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-      })),
-    );
+    for (let offset = 0; offset < customers.length; offset += BATCH_SIZE) {
+      await db.insert(schema.customers).values(
+        customers.slice(offset, offset + BATCH_SIZE).map((customer) => ({
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+        })),
+      );
+    }
   }
 
   const categories = await db.select().from(schema.categories);
@@ -111,7 +159,11 @@ async function seedFixtures(db: ReturnType<typeof drizzle>) {
     categories.map((category) => [category.name, category.id]),
   );
 
-  for (const category of EXTRA_CATEGORIES) {
+  const categoryFixtures = bulk
+    ? [...EXTRA_CATEGORIES, ...generateBulkCategories()]
+    : EXTRA_CATEGORIES;
+
+  for (const category of categoryFixtures) {
     if (categoryByName[category.name]) continue;
     const [inserted] = await db
       .insert(schema.categories)
@@ -123,19 +175,42 @@ async function seedFixtures(db: ReturnType<typeof drizzle>) {
   const existingProducts = await db.select().from(schema.products);
   const productNames = new Set(existingProducts.map((product) => product.name));
 
-  const productsToInsert = EXTRA_PRODUCTS.filter(
-    (product) => !productNames.has(product.name),
-  ).map((product) => ({
-    name: product.name,
-    categoryId: categoryByName[product.category] ?? null,
-    price: product.price,
-    taxRate: product.taxRate,
-    unitOfMeasure: "piece" as const,
-    isKitchenItem: product.isKitchenItem,
-  }));
+  const productFixtures = bulk
+    ? [...EXTRA_PRODUCTS, ...generateBulkProducts(productTarget)]
+    : EXTRA_PRODUCTS;
+
+  const productsToInsert = productFixtures
+    .filter((product) => !productNames.has(product.name))
+    .map((product) => ({
+      name: product.name,
+      categoryId: categoryByName[product.category] ?? null,
+      price: product.price,
+      taxRate: product.taxRate,
+      unitOfMeasure: "piece" as const,
+      isKitchenItem: product.isKitchenItem,
+    }));
 
   if (productsToInsert.length > 0) {
-    await db.insert(schema.products).values(productsToInsert);
+    for (let offset = 0; offset < productsToInsert.length; offset += BATCH_SIZE) {
+      await db
+        .insert(schema.products)
+        .values(productsToInsert.slice(offset, offset + BATCH_SIZE));
+    }
+  }
+
+  if (bulk) {
+    await db
+      .insert(schema.coupons)
+      .values(
+        generateBulkCoupons().map((coupon) => ({
+          code: coupon.code,
+          discountType: coupon.discountType,
+          value: coupon.value,
+          stackable: coupon.stackable,
+          active: true,
+        })),
+      )
+      .onConflictDoNothing({ target: schema.coupons.code });
   }
 
   const floors = await db.select().from(schema.floors);
@@ -173,39 +248,43 @@ async function loadSeedContext(db: ReturnType<typeof drizzle>): Promise<SeedCont
     .select()
     .from(schema.users)
     .where(eq(schema.users.role, "employee"));
-  const customers = await db
-    .select()
-    .from(schema.customers)
-    .where(like(schema.customers.email, `%${DEMO_CUSTOMER_EMAIL_DOMAIN}`));
-  const [couponRow] = await db
+  const customers = bulk
+    ? await db.select().from(schema.customers)
+    : await db
+        .select()
+        .from(schema.customers)
+        .where(like(schema.customers.email, `%${DEMO_CUSTOMER_EMAIL_DOMAIN}`));
+  const couponRows = await db
     .select()
     .from(schema.coupons)
-    .where(eq(schema.coupons.code, "WELCOME10"))
-    .limit(1);
+    .where(eq(schema.coupons.active, true));
   const promotionRows = await db
     .select()
     .from(schema.promotions)
     .where(eq(schema.promotions.active, true));
 
+  const mappedProducts = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    taxRate: product.taxRate,
+    isKitchenItem: product.isKitchenItem,
+  }));
+
   return {
-    products: products.map((product) => ({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      taxRate: product.taxRate,
-      isKitchenItem: product.isKitchenItem,
-    })),
+    products: mappedProducts,
+    productWeights: bulk
+      ? productPopularityWeights(mappedProducts.map((product) => product.id))
+      : undefined,
     tableIds: tables.map((table) => table.id),
     employeeIds: employees.map((employee) => employee.id),
     customerIds: customers.map((customer) => customer.id),
-    coupon: couponRow
-      ? {
-          id: couponRow.id,
-          code: couponRow.code,
-          discountType: couponRow.discountType,
-          value: Number(couponRow.value),
-        }
-      : null,
+    coupons: couponRows.map((coupon) => ({
+      id: coupon.id,
+      code: coupon.code,
+      discountType: coupon.discountType,
+      value: Number(coupon.value),
+    })),
     promotions: promotionRows.map((promotion) => ({
       id: promotion.id,
       name: promotion.name,
@@ -218,7 +297,8 @@ async function loadSeedContext(db: ReturnType<typeof drizzle>): Promise<SeedCont
       discountType: promotion.discountType,
       value: Number(promotion.value),
     })),
-    rng: createRng(20260613),
+    rng: createRng(bulk ? 20260614 : 20260613),
+    orderVolumeMultiplier,
   };
 }
 
@@ -336,6 +416,14 @@ async function main() {
   const db = drizzle(pool, { schema });
 
   console.log("Demo seed starting...");
+  if (bulk) {
+    console.log(
+      `Bulk mode: ${productTarget} products, ${employeeTarget} employees, ${customerTarget} customers, ${historyDays} days @ ${orderVolumeMultiplier}x volume.`,
+    );
+    console.log(
+      "Flags: --force (wipe history), --days=N, --volume=N, --products=N, --employees=N, --customers=N",
+    );
+  }
   await ensureBaseSeed(db);
 
   if (!force && (await hasExistingDemoData(db))) {
@@ -358,8 +446,8 @@ async function main() {
     throw new Error("Demo seed context is incomplete after fixture insert.");
   }
 
-  console.log("Generating 90 days of sessions and orders...");
-  const generated = generateDemoHistory(ctx, 90);
+  console.log(`Generating ${historyDays} days of sessions and orders...`);
+  const generated = generateDemoHistory(ctx, historyDays);
 
   console.log(
     `Inserting ${generated.totalSessions} sessions and ${generated.totalOrders} paid orders...`,
@@ -367,6 +455,10 @@ async function main() {
   const inserted = await insertGeneratedHistory(db, generated.sessions);
 
   console.log("\nDemo seed complete.");
+  console.log(`  Products : ${ctx.products.length}`);
+  console.log(`  Employees: ${ctx.employeeIds.length}`);
+  console.log(`  Customers: ${ctx.customerIds.length}`);
+  console.log(`  Coupons  : ${ctx.coupons.length}`);
   console.log(`  Sessions : ${generated.totalSessions}`);
   console.log(`  Orders   : ${inserted.orderCount}`);
   console.log(`  Items    : ${inserted.itemCount}`);

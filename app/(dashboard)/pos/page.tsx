@@ -7,15 +7,22 @@ import {
   getActiveTableOccupancies,
   getFloorsWithTables,
   getReservationForCart,
+  getUpcomingTableReservations,
 } from "@/lib/pos/queries";
 import { SessionScreen } from "@/components/pos/session-screen";
 import { CartStoreHydration } from "@/components/pos/cart-store-hydration";
+import { OfflineKitchenSync } from "@/components/pos/offline-kitchen-sync";
 import { OrderView } from "@/components/pos/order-view";
 import { getLastClosedSession, getOpenSessionForUser } from "@/lib/pos/session";
 import { redirect } from "next/navigation";
 
 type PosPageProps = {
-  searchParams: Promise<{ table?: string; tables?: string; edit?: string; reservation?: string }>;
+  searchParams: Promise<{
+    table?: string;
+    tables?: string;
+    edit?: string;
+    reservation?: string;
+  }>;
 };
 
 export default async function PosOrderPage({ searchParams }: PosPageProps) {
@@ -34,9 +41,7 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
       <SessionScreen
         lastClosedAt={lastClosed?.closedAt?.toISOString() ?? null}
         lastClosingAmount={
-          lastClosed?.closingAmount
-            ? Number(lastClosed.closingAmount)
-            : null
+          lastClosed?.closingAmount ? Number(lastClosed.closingAmount) : null
         }
       />
     );
@@ -49,6 +54,7 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
     customers,
     floors,
     activeTableOrders,
+    upcomingReservations,
     reservation,
   ] = await Promise.all([
     getActiveProducts(),
@@ -57,9 +63,13 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
     getCustomers(),
     getFloorsWithTables(),
     getActiveTableOccupancies(openSession.id),
-    reservationId ? getReservationForCart(reservationId) : Promise.resolve(null),
+    getUpcomingTableReservations(),
+    reservationId
+      ? getReservationForCart(reservationId)
+      : Promise.resolve(null),
   ]);
   const occupiedOrdersByTable = Object.fromEntries(activeTableOrders);
+  const upcomingReservationsByTable = Object.fromEntries(upcomingReservations);
   const selectedTableIds = Array.from(
     new Set(
       (tableIdsParam?.split(",").filter(Boolean) ?? []).length > 0
@@ -72,10 +82,7 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
     ),
   );
   const activeOrder = tableId ? occupiedOrdersByTable[tableId] : null;
-  if (
-    activeOrder?.kind === "order" &&
-    activeOrder.orderId !== editOrderId
-  ) {
+  if (activeOrder?.kind === "order" && activeOrder.orderId !== editOrderId) {
     redirect(`/pos/orders/${activeOrder.orderId}`);
   }
   if (
@@ -90,6 +97,7 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <CartStoreHydration />
+      <OfflineKitchenSync />
       <OrderView
         tableId={tableId ?? null}
         tableIds={selectedTableIds}
@@ -127,6 +135,7 @@ export default async function PosOrderPage({ searchParams }: PosPageProps) {
         }))}
         occupiedTableIds={Object.keys(occupiedOrdersByTable)}
         occupiedOrdersByTable={occupiedOrdersByTable}
+        upcomingReservationsByTable={upcomingReservationsByTable}
       />
     </div>
   );

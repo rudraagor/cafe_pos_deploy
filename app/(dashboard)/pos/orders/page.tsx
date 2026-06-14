@@ -4,6 +4,7 @@ import { getSessionOrders } from "@/lib/pos/queries";
 import { getOpenSessionForUser } from "@/lib/pos/session";
 import { formatMergedTableLabel } from "@/lib/pos/table-labels";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 export default async function PosOrdersPage() {
   const user = await requireUser();
@@ -14,9 +15,15 @@ export default async function PosOrdersPage() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-4 text-xl font-semibold">Orders</h1>
-      <OrdersTable
-        orders={orders.map((o) => ({
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold">Orders</h1>
+        <p className="text-muted-foreground text-sm">
+          All session orders including guest QR submissions awaiting approval.
+        </p>
+      </div>
+      <Suspense fallback={null}>
+        <OrdersTable
+          orders={orders.map((o) => ({
           id: o.id,
           orderNumber: o.orderNumber,
           createdAt: o.createdAt.toISOString(),
@@ -40,7 +47,8 @@ export default async function PosOrdersPage() {
                   ? `T${o.table.number}`
                   : "—",
         }))}
-      />
+        />
+      </Suspense>
     </div>
   );
 }

@@ -4,7 +4,10 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { getOpenAI } from "@/lib/ai/client";
-import { buildReportAiContext, AI_CURRENCY_INSTRUCTION } from "@/lib/ai/context";
+import {
+  buildReportAiContext,
+  AI_CURRENCY_INSTRUCTION,
+} from "@/lib/ai/context";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { aiReports } from "@/lib/db/schema";
@@ -19,6 +22,7 @@ import {
   type ReportFilters,
   type ReportSearchParams,
 } from "@/lib/reports/range";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 type AiActionOptions = { skipCache?: boolean };
 
@@ -38,7 +42,15 @@ export async function generateDailyBriefing(
   params: ReportSearchParams,
   options: AiActionOptions = {},
 ): Promise<AiActionResult> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
+  const limit = checkRateLimit({
+    scope: "ai:daily_briefing",
+    identifier: user.id,
+    limit: 6,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) return { ok: false, error: "AI briefing is rate limited." };
+
   const filters = parseReportFilters(params);
 
   if (!options.skipCache) {
@@ -55,8 +67,7 @@ export async function generateDailyBriefing(
     [
       {
         role: "system",
-        content:
-          `You are a concise cafe analyst. Use only the provided filtered aggregate data. Write a markdown briefing with ## headings and bullet lists covering revenue, paid orders, best seller, quiet period if visible, and exactly two practical actions. Mention that the answer is scoped to the selected filters. Do not invent missing data. ${AI_CURRENCY_INSTRUCTION}`,
+        content: `You are a concise cafe analyst. Use only the provided filtered aggregate data. Write a markdown briefing with ## headings and bullet lists covering revenue, paid orders, best seller, quiet period if visible, and exactly two practical actions. Mention that the answer is scoped to the selected filters. Do not invent missing data. ${AI_CURRENCY_INSTRUCTION}`,
       },
       { role: "user", content: JSON.stringify(context) },
     ],
@@ -74,7 +85,15 @@ export async function generateInventoryForecast(
   params: ReportSearchParams,
   options: AiActionOptions = {},
 ): Promise<AiActionResult<ForecastItem[]>> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
+  const limit = checkRateLimit({
+    scope: "ai:inventory_forecast",
+    identifier: user.id,
+    limit: 6,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) return { ok: false, error: "AI forecast is rate limited." };
+
   const filters = parseReportFilters(params);
 
   if (!options.skipCache) {
@@ -150,7 +169,15 @@ export async function askReportQuestion(
   params: ReportSearchParams,
   question: string,
 ): Promise<AiActionResult> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
+  const limit = checkRateLimit({
+    scope: "ai:ask",
+    identifier: user.id,
+    limit: 10,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) return { ok: false, error: "AI questions are rate limited." };
+
   const cleaned = question.trim();
   if (cleaned.length < 3) {
     return { ok: false, error: "Ask a reporting question first." };
@@ -165,8 +192,7 @@ export async function askReportQuestion(
     [
       {
         role: "system",
-        content:
-          `Answer questions about this cafe using only the provided filtered aggregate data. Use markdown with headings and bullets when helpful. If the data cannot answer the question, say what is missing instead of guessing. Mention the selected filters when relevant. Never mention customer PII. ${AI_CURRENCY_INSTRUCTION}`,
+        content: `Answer questions about this cafe using only the provided filtered aggregate data. Use markdown with headings and bullets when helpful. If the data cannot answer the question, say what is missing instead of guessing. Mention the selected filters when relevant. Never mention customer PII. ${AI_CURRENCY_INSTRUCTION}`,
       },
       {
         role: "user",
@@ -184,7 +210,16 @@ export async function clearAiCache(
   kind: "daily_briefing" | "inventory_forecast",
   params: ReportSearchParams,
 ): Promise<ActionResult> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
+  const limit = checkRateLimit({
+    scope: "ai:clear_cache",
+    identifier: user.id,
+    limit: 20,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok)
+    return { ok: false, error: "AI cache resets are rate limited." };
+
   const filters = parseReportFilters(params);
   await db
     .delete(aiReports)
@@ -257,6 +292,9 @@ async function createResponse(
     return { ok: true, data: response.output_text };
   } catch (error) {
     console.error("AI report generation failed", error);
-    return { ok: false, error: "AI insights could not be generated right now." };
+    return {
+      ok: false,
+      error: "AI insights could not be generated right now.",
+    };
   }
 }

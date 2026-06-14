@@ -1,5 +1,20 @@
 export type RangePreset = "today" | "yesterday" | "last7" | "month" | "custom";
 
+export type ChartBucket = "1d" | "7d" | "15d" | "30d";
+
+export const chartBuckets: { value: ChartBucket; label: string }[] = [
+  { value: "1d", label: "1d" },
+  { value: "7d", label: "7d" },
+  { value: "15d", label: "15d" },
+  { value: "30d", label: "30d" },
+];
+
+export type ReportDataBounds = {
+  minDate: string | null;
+  maxDate: string | null;
+  yearsWithData: number[];
+};
+
 export type ReportRange = {
   preset: RangePreset;
   start: Date;
@@ -76,6 +91,26 @@ export function parseReportFilters(
   };
 }
 
+/** Pick a chart bucket that keeps trend charts readable for the selected span. */
+export function resolveChartBucket(range: ReportRange): ChartBucket {
+  const days = Math.max(
+    1,
+    Math.round((range.end.getTime() - range.start.getTime()) / 86400000),
+  );
+  if (days <= 14) return "1d";
+  if (days <= 45) return "7d";
+  if (days <= 90) return "15d";
+  return "30d";
+}
+
+export function isDateInBounds(date: Date, bounds: ReportDataBounds) {
+  if (!bounds.minDate || !bounds.maxDate) return true;
+  const min = parseBoundDate(bounds.minDate);
+  const max = parseBoundDate(bounds.maxDate);
+  const day = startOfDay(date);
+  return day >= min && day <= max;
+}
+
 export function rangeToSearchParams(range: ReportRange | ReportFilters) {
   const params = new URLSearchParams({ preset: range.preset });
   if (range.preset === "custom") {
@@ -104,6 +139,97 @@ export function reportParamsFromUrlSearchParams(
     employeeId: searchParams.getAll("employeeId"),
     sessionId: searchParams.getAll("sessionId"),
     productId: searchParams.getAll("productId"),
+  };
+}
+
+export function yearsForDataPicker(bounds: ReportDataBounds) {
+  return [...bounds.yearsWithData].sort((a, b) => b - a);
+}
+
+export function monthsInBoundsForYear(
+  year: number,
+  bounds: ReportDataBounds,
+): number[] {
+  if (!bounds.minDate || !bounds.maxDate) {
+    return Array.from({ length: 12 }, (_, index) => index + 1);
+  }
+  const min = parseBoundDate(bounds.minDate);
+  const max = parseBoundDate(bounds.maxDate);
+  if (year < min.getFullYear() || year > max.getFullYear()) return [];
+  const start = year === min.getFullYear() ? min.getMonth() + 1 : 1;
+  const end = year === max.getFullYear() ? max.getMonth() + 1 : 12;
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
+
+export function daysInBoundsForMonth(
+  year: number,
+  month: number,
+  bounds: ReportDataBounds,
+): number[] {
+  const lastDay = new Date(year, month, 0).getDate();
+  if (!bounds.minDate || !bounds.maxDate) {
+    return Array.from({ length: lastDay }, (_, index) => index + 1);
+  }
+  const min = parseBoundDate(bounds.minDate);
+  const max = parseBoundDate(bounds.maxDate);
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month - 1, lastDay);
+  if (monthStart > max || monthEnd < min) return [];
+  let start = 1;
+  let end = lastDay;
+  if (year === min.getFullYear() && month === min.getMonth() + 1) {
+    start = min.getDate();
+  }
+  if (year === max.getFullYear() && month === max.getMonth() + 1) {
+    end = max.getDate();
+  }
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
+
+export function clampReportFilters(
+  filters: ReportFilters,
+  bounds: ReportDataBounds,
+): ReportFilters {
+  if (!bounds.minDate || !bounds.maxDate) return filters;
+
+  const min = parseBoundDate(bounds.minDate);
+  const maxEnd = addDays(parseBoundDate(bounds.maxDate), 1);
+  const start = filters.start < min ? min : filters.start;
+  const end = filters.end > maxEnd ? maxEnd : filters.end;
+
+  if (start >= end) {
+    return clampReportFilters(
+      {
+        ...filters,
+        ...parseReportRange({ preset: "last7" }),
+        preset: "last7",
+      },
+      bounds,
+    );
+  }
+
+  const datesChanged =
+    start.getTime() !== filters.start.getTime() ||
+    end.getTime() !== filters.end.getTime();
+
+  return {
+    ...filters,
+    preset:
+      filters.preset === "custom" || datesChanged ? "custom" : filters.preset,
+    start,
+    end,
+  };
+}
+
+export function yearRangeDates(year: number, bounds: ReportDataBounds) {
+  const start = `${year}-01-01`;
+  const end = `${year}-12-31`;
+  if (!bounds.minDate || !bounds.maxDate) {
+    return { start, end };
+  }
+  return {
+    start: start < bounds.minDate ? bounds.minDate : start,
+    end: end > bounds.maxDate ? bounds.maxDate : end,
   };
 }
 
@@ -168,6 +294,10 @@ function cleanFilterIds(value: string | string[] | undefined) {
         .filter((item) => item && item !== "all"),
     ),
   ];
+}
+
+function parseBoundDate(value: string) {
+  return startOfDay(new Date(`${value}T00:00:00`));
 }
 
 function parseDateBoundary(value: string | undefined, side: "start" | "end") {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { TableQrButton } from "@/components/pos/table-qr-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatReportDateTime } from "@/lib/reports/range";
@@ -234,7 +235,14 @@ export function BookingManagement({
                         {table.active ? "Active" : "Inactive"}
                       </Badge>
                     </div>
-                    <div className="mt-3 flex justify-end gap-1">
+                    <div className="mt-3 flex flex-wrap justify-end gap-1">
+                      {table.active ? (
+                        <TableQrButton
+                          tableId={table.id}
+                          tableNumber={table.number}
+                          variant="sm"
+                        />
+                      ) : null}
                       <TableFormDialog
                         mode="edit"
                         floors={floorOptions}

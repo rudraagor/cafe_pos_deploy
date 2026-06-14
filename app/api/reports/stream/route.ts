@@ -4,6 +4,11 @@ import {
   type ReportsChangedPayload,
 } from "@/lib/realtime/bus";
 import { auth } from "@/auth";
+import {
+  checkRateLimit,
+  clientIpFromHeaders,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,6 +18,13 @@ export async function GET(request: Request) {
   if (session?.user?.role !== "admin") {
     return new Response("Forbidden", { status: 403 });
   }
+  const limit = checkRateLimit({
+    scope: "api:reports:stream",
+    identifier: session.user.id ?? clientIpFromHeaders(request.headers),
+    limit: 60,
+    windowMs: 60 * 1000,
+  });
+  if (!limit.ok) return rateLimitResponse(limit);
 
   const encoder = new TextEncoder();
   let keepAlive: ReturnType<typeof setInterval> | null = null;
