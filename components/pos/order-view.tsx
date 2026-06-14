@@ -142,6 +142,7 @@ export function OrderView({
           tableId={cartId}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          promotions={promotions}
         />
         <div className="hidden h-full min-h-0 overflow-hidden lg:block">
           <PosCartColumn
@@ -152,6 +153,8 @@ export function OrderView({
             reservationCustomerName={initialReservationCustomerName}
             fulfillmentType={fulfillmentType}
             promotions={promotions}
+            products={products}
+            categories={categories}
             customers={customers}
           />
         </div>

@@ -3,6 +3,7 @@
 import { Minus, Plus, Send, ShoppingBag } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PromotionsOffersButton } from "@/components/promotions/promotions-offers-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import {
   type ModifierId,
 } from "@/lib/pos/modifiers";
 import { formatMoney } from "@/lib/pos/pricing";
+import type { PromotionInput } from "@/lib/pos/pricing";
 import { cn } from "@/lib/utils";
 
 type QrProduct = {
@@ -49,6 +51,7 @@ type CustomerOrderFormProps = {
   tableLabel: string;
   products: QrProduct[];
   categories: QrCategory[];
+  promotions?: PromotionInput[];
 };
 
 export function CustomerOrderForm({
@@ -56,6 +59,7 @@ export function CustomerOrderForm({
   tableLabel,
   products,
   categories,
+  promotions = [],
 }: CustomerOrderFormProps) {
   const [activeCategory, setActiveCategory] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
@@ -171,10 +175,21 @@ export function CustomerOrderForm({
             <p className="text-xs font-medium text-muted-foreground">Chai Biskit Cafe</p>
             <h1 className="text-lg font-semibold">{tableLabel}</h1>
           </div>
-          <Badge variant="secondary">
-            <ShoppingBag className="size-3" />
-            {totalQty} items
-          </Badge>
+          <div className="flex items-center gap-2">
+            {promotions.length > 0 ? (
+              <PromotionsOffersButton
+                promotions={promotions}
+                products={products}
+                categories={categories}
+                variant="guest"
+                size="sm"
+              />
+            ) : null}
+            <Badge variant="secondary">
+              <ShoppingBag className="size-3" />
+              {totalQty} items
+            </Badge>
+          </div>
         </div>
       </header>
 

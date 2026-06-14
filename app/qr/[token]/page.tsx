@@ -1,10 +1,6 @@
 import { notFound } from "next/navigation";
 import { CustomerOrderForm } from "@/components/qr/customer-order-form";
-import {
-  getActiveCategories,
-  getActiveProducts,
-  getTableById,
-} from "@/lib/pos/queries";
+import { getActiveCategories, getActiveProducts, getActivePromotions, getTableById } from "@/lib/pos/queries";
 import { verifyTableOrderToken } from "@/lib/pos/qr-ordering";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +14,11 @@ export default async function QrOrderPage({ params }: Props) {
   const verified = verifyTableOrderToken(token);
   if (!verified) notFound();
 
-  const [table, products, categories] = await Promise.all([
+  const [table, products, categories, promotions] = await Promise.all([
     getTableById(verified.tableId),
     getActiveProducts(),
     getActiveCategories(),
+    getActivePromotions(),
   ]);
   if (!table || !table.active) notFound();
 
@@ -46,6 +43,7 @@ export default async function QrOrderPage({ params }: Props) {
         name: category.name,
         color: category.color,
       }))}
+      promotions={promotions}
     />
   );
 }

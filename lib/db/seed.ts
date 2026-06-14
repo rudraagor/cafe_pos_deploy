@@ -6,6 +6,7 @@ loadLocalEnv();
 import bcrypt from "bcryptjs";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
+import { seedPromotionsIfMissing, replaceLegacySinglePromotion } from "./seed-demo/seed-promotions";
 
 async function main() {
   const pool = createPgPool();
@@ -134,15 +135,18 @@ async function main() {
       value: "10.00",
     });
 
-    await db.insert(schema.promotions).values({
-      name: "Bulk Coffee Deal",
-      scope: "order",
-      minOrderAmount: "500.00",
-      discountType: "fixed",
-      value: "50.00",
-    });
+    await replaceLegacySinglePromotion(db);
+    const promotionCount = await seedPromotionsIfMissing(db);
+    if (promotionCount > 0) {
+      console.log(`  Promotions: seeded ${promotionCount}`);
+    }
   } else {
     console.log("Catalog already seeded, skipping products/floors/coupons.");
+    await replaceLegacySinglePromotion(db);
+    const promotionCount = await seedPromotionsIfMissing(db);
+    if (promotionCount > 0) {
+      console.log(`  Promotions: added ${promotionCount} new promotion(s)`);
+    }
   }
 
   console.log("Seed complete.");

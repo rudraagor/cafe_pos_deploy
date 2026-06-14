@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { PromotionsOffersButton } from "@/components/promotions/promotions-offers-button";
 import { DirectGrabBadge } from "@/components/pos/direct-grab-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
   type ModifierId,
 } from "@/lib/pos/modifiers";
 import { cn } from "@/lib/utils";
+import type { PromotionInput } from "@/lib/pos/pricing";
 
 export type PosProduct = {
   id: string;
@@ -48,6 +50,7 @@ type ProductGridProps = {
   tableId: string;
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
+  promotions?: PromotionInput[];
 };
 
 export function ProductGrid({
@@ -56,6 +59,7 @@ export function ProductGrid({
   tableId,
   searchQuery: controlledSearch = "",
   onSearchChange,
+  promotions = [],
 }: ProductGridProps) {
   const [internalSearch, setInternalSearch] = useState("");
   const searchQuery = onSearchChange ? controlledSearch : internalSearch;
@@ -170,8 +174,8 @@ export function ProductGrid({
         ))}
       </div>
 
-      <div className="border-b px-3 py-2">
-        <div className="relative">
+      <div className="flex gap-2 border-b px-3 py-2">
+        <div className="relative min-w-0 flex-1">
           <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
             value={searchQuery}
@@ -180,6 +184,15 @@ export function ProductGrid({
             className="h-10 pl-9"
           />
         </div>
+        {promotions.length > 0 ? (
+          <PromotionsOffersButton
+            promotions={promotions}
+            products={products}
+            categories={categories}
+            variant="staff"
+            size="sm"
+          />
+        ) : null}
       </div>
 
       <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 sm:grid-cols-3 xl:grid-cols-4">

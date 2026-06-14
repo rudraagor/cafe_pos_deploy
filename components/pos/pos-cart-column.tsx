@@ -20,6 +20,7 @@ import {
 import { CustomerAssignPopup } from "@/components/pos/customer-assign-popup";
 import { DiscountPopup } from "@/components/pos/discount-popup";
 import { DirectGrabBadge } from "@/components/pos/direct-grab-badge";
+import { PromotionsOffersButton } from "@/components/promotions/promotions-offers-button";
 import { Button } from "@/components/ui/button";
 import { useTableCart, useCartStore } from "@/lib/pos/cart-store";
 import { modifierLabel } from "@/lib/pos/modifiers";
@@ -39,6 +40,8 @@ type PosCartColumnProps = {
   reservationCustomerName?: string | null;
   fulfillmentType: "dine_in" | "takeaway";
   promotions: PromotionInput[];
+  products: Array<{ id: string; name: string; categoryId: string | null }>;
+  categories: Array<{ id: string; name: string }>;
   customers: CustomerOption[];
 };
 
@@ -50,6 +53,8 @@ export function PosCartColumn({
   reservationCustomerName,
   fulfillmentType,
   promotions,
+  products,
+  categories,
   customers,
 }: PosCartColumnProps) {
   const router = useRouter();
@@ -356,6 +361,16 @@ export function PosCartColumn({
             Discount
           </Button>
         </div>
+        {promotions.length > 0 ? (
+          <PromotionsOffersButton
+            promotions={promotions}
+            products={products}
+            categories={categories}
+            variant="staff"
+            size="sm"
+            className="h-9 w-full"
+          />
+        ) : null}
         <Button
           type="button"
           variant={cart.customerId ? "secondary" : "outline"}

@@ -94,7 +94,7 @@ function minutesFromTime(value: string | null | undefined) {
   return hours * 60 + minutes;
 }
 
-function promotionIsInWindow(promo: PromotionInput, now: Date) {
+export function isPromotionActiveNow(promo: PromotionInput, now = new Date()) {
   const days = promo.daysOfWeek ?? [];
   if (days.length > 0 && !days.includes(now.getDay())) return false;
 
@@ -164,7 +164,7 @@ export function computeOrder(
     coupon?.stackable === false
       ? []
       : (options.promotions ?? []).filter((promo) =>
-          promotionIsInWindow(promo, now),
+          isPromotionActiveNow(promo, now),
         );
 
   const lines: ComputedLine[] = items.map((item) => ({

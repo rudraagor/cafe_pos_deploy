@@ -17,6 +17,13 @@ import {
   productPopularityWeights,
 } from "./seed-demo/bulk-fixtures";
 import {
+  mapPromotionRowForPricing,
+} from "./seed-demo/promotion-fixtures";
+import {
+  replaceLegacySinglePromotion,
+  seedPromotionsIfMissing,
+} from "./seed-demo/seed-promotions";
+import {
   createRng,
   generateDemoHistory,
   type GeneratedOrder,
@@ -239,6 +246,12 @@ async function seedFixtures(db: ReturnType<typeof drizzle>) {
   if (tablesToInsert.length > 0) {
     await db.insert(schema.tables).values(tablesToInsert);
   }
+
+  await replaceLegacySinglePromotion(db);
+  const promotionCount = await seedPromotionsIfMissing(db);
+  if (promotionCount > 0) {
+    console.log(`  Promotions: added ${promotionCount}`);
+  }
 }
 
 async function loadSeedContext(db: ReturnType<typeof drizzle>): Promise<SeedContext> {
@@ -285,18 +298,7 @@ async function loadSeedContext(db: ReturnType<typeof drizzle>): Promise<SeedCont
       discountType: coupon.discountType,
       value: Number(coupon.value),
     })),
-    promotions: promotionRows.map((promotion) => ({
-      id: promotion.id,
-      name: promotion.name,
-      scope: promotion.scope,
-      productId: promotion.productId,
-      minQuantity: promotion.minQuantity,
-      minOrderAmount: promotion.minOrderAmount
-        ? Number(promotion.minOrderAmount)
-        : null,
-      discountType: promotion.discountType,
-      value: Number(promotion.value),
-    })),
+    promotions: promotionRows.map(mapPromotionRowForPricing),
     rng: createRng(bulk ? 20260614 : 20260613),
     orderVolumeMultiplier,
   };
