@@ -71,17 +71,17 @@ We went past a minimal POS demo with a few standout additions:
       <br /><sub><b>Admin</b> — products, modifiers, stock, categories</sub>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/07-kds.png" alt="Kitchen Display" />
+      <img src="docs/screenshots/07-kds_1.png" alt="Kitchen Display" />
       <br /><sub><b>KDS</b> — live tickets, prep stages, overdue coloring</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/04-admin-reports.png" alt="Reports" />
+      <img src="docs/screenshots/04-admin-reports_1.png" alt="Reports" />
       <br /><sub><b>Reports</b> — KPIs, charts, exports, live refresh</sub>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/05-admin-coupons.png" alt="Coupons & Promotions" />
+      <img src="docs/screenshots/05-admin-coupons_1.png" alt="Coupons & Promotions" />
       <br /><sub><b>Discounts</b> — coupons, combos, happy-hour promos</sub>
     </td>
   </tr>
